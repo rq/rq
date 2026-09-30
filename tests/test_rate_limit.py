@@ -1,4 +1,5 @@
 from datetime import datetime
+from unittest import mock
 
 from rq.exceptions import InvalidJobOperation
 from rq.executions import Execution
@@ -9,7 +10,7 @@ from rq.registry import ScheduledJobRegistry, StartedJobRegistry
 from rq.scheduler import RQScheduler
 from rq.worker import SimpleWorker
 from tests import RQTestCase
-from tests.fixtures import div_by_zero, returns_retry, returns_retry_with_delay, say_hello
+from tests.fixtures import CustomJob, div_by_zero, returns_retry, returns_retry_with_delay, say_hello
 
 
 class TestRateLimit(RQTestCase):
@@ -347,6 +348,55 @@ class TestRateLimitEnqueue(RQTestCase):
         sync_queue = Queue('default', connection=self.connection, is_async=False)
         with self.assertRaises(ValueError):
             sync_queue.enqueue(say_hello, rate_limit=RateLimit(key='test', concurrency=1))
+
+    def test_rate_limit_requires_default_key_prefixes(self):
+        """Rate-limited jobs are rejected when the job or queue class overrides its key prefix."""
+
+        class PrefixedJob(Job):
+            redis_job_namespace_prefix = 'custom:job:'
+
+        class PrefixedQueue(Queue):
+            redis_queue_namespace_prefix = 'custom:queue:'
+
+        rate_limit = RateLimit(key='test', concurrency=1)
+
+        # Custom job prefix, via enqueue()
+        queue = Queue('default', connection=self.connection, job_class=PrefixedJob)
+        with self.assertRaises(ValueError):
+            queue.enqueue(say_hello, job_id='rl', rate_limit=rate_limit)
+        self.assertFalse(self.connection.exists(PrefixedJob.key_for('rl')))
+
+        # Custom queue prefix, via enqueue_at()
+        prefixed_queue = PrefixedQueue('default', connection=self.connection)
+        with self.assertRaises(ValueError):
+            prefixed_queue.enqueue_at(datetime(2100, 1, 1), say_hello, job_id='rl', rate_limit=rate_limit)
+        self.assertFalse(self.connection.exists(Job.key_for('rl')))
+        self.assertEqual(ScheduledJobRegistry(queue=prefixed_queue).count, 0)
+
+        # A job subclass that keeps the default prefix is accepted
+        queue = Queue('default', connection=self.connection, job_class=CustomJob)
+        job = queue.enqueue(say_hello, rate_limit=rate_limit)
+        self.assertEqual(job.get_status(refresh=False), JobStatus.QUEUED)
+        self.assertEqual(queue.job_ids, [job.id])
+
+    def test_promotion_uses_base_class_namespace_prefixes(self):
+        """Promotion and cleanup use the prefixes set on the base Job and Queue classes."""
+        rate_limit = RateLimit(key='test', concurrency=1)
+        registry = RateLimitRegistry(key='test', connection=self.connection)
+        with (
+            mock.patch.object(Job, 'redis_job_namespace_prefix', 'custom:job:'),
+            mock.patch.object(Queue, 'redis_queue_namespace_prefix', 'custom:queue:'),
+        ):
+            queue = Queue('default', connection=self.connection)
+            job_1 = queue.enqueue(say_hello, rate_limit=rate_limit)
+            job_2 = queue.enqueue(say_hello, rate_limit=rate_limit)
+            self.assertEqual(queue.job_ids, [job_1.id])
+
+            self.assertEqual(registry.release_and_enqueue(job_1.id), job_2.id)
+            self.assertEqual(queue.job_ids, [job_1.id, job_2.id])
+
+            registry.cleanup()
+            self.assertEqual(registry.get_allowed_job_ids(), [job_2.id])
 
     def test_enqueue_with_rate_limit(self):
         """Jobs exceeding concurrency limit are deferred, others are queued."""

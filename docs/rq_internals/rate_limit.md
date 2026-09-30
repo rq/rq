@@ -77,7 +77,10 @@ Jobs persist `rate_limit_key` and `rate_limit_concurrency` on their hash;
   a single shared body, so the two can't drift.
 
 Each operation runs as a single Lua script, so the capacity check and the promotion
-execute atomically in Redis and cannot interleave across concurrent workers.
+execute atomically in Redis and cannot interleave across concurrent workers. The
+promoted job is only known inside the script, so it builds the job and queue keys from
+the `Job` and `Queue` key prefixes passed as arguments. Enqueueing a rate-limited job
+is rejected when its job class or queue class overrides those prefixes.
 
 ## Interactions Worth Knowing
 

@@ -6,6 +6,7 @@ from functools import cached_property
 from redis import Redis
 from redis.client import Pipeline
 
+from .job import Job, JobStatus
 from .utils import as_text, current_timestamp, now, utcformat
 
 
@@ -27,16 +28,19 @@ class RateLimit:
         self.concurrency = concurrency
 
 
-# Lua: if allowed < max_concurrency, pop the next valid rate_limited job (skipping
-# stale entries), add it to allowed, RPUSH to its queue and mark it queued.
-# Returns the enqueued job_id or nil.
+# Lua: if allowed < max_concurrency, pop the oldest rate_limited job (skipping stale
+# entries), add it to allowed, push it onto its queue (front if enqueue_at_front is set)
+# and mark it queued. Returns the enqueued job_id or nil.
+# Job and queue keys depend on the popped job, so they're built from the passed prefixes.
 # KEYS: allowed_key, rate_limited_key
-# ARGV: max_concurrency, timestamp, enqueued_at
+# ARGV: max_concurrency, timestamp, enqueued_at, queue_key_prefix, job_key_prefix
 ACQUIRE_AND_ENQUEUE_SCRIPT = """
 local allowed_count = redis.call('ZCARD', KEYS[1])
 local max_concurrency = tonumber(ARGV[1])
 local timestamp = tonumber(ARGV[2])
 local enqueued_at = ARGV[3]
+local queue_key_prefix = ARGV[4]
+local job_key_prefix = ARGV[5]
 
 if allowed_count < max_concurrency then
     while true do
@@ -45,16 +49,17 @@ if allowed_count < max_concurrency then
             return nil
         end
         local job_id = result[1]
-        local origin = redis.call('HGET', 'rq:job:' .. job_id, 'origin')
-        local status = redis.call('HGET', 'rq:job:' .. job_id, 'status')
+        local job_key = job_key_prefix .. job_id
+        local origin = redis.call('HGET', job_key, 'origin')
+        local status = redis.call('HGET', job_key, 'status')
         if origin and status == 'rate_limited' then
             redis.call('ZADD', KEYS[1], timestamp, job_id)
-            if redis.call('HGET', 'rq:job:' .. job_id, 'enqueue_at_front') == '1' then
-                redis.call('LPUSH', 'rq:queue:' .. origin, job_id)
+            if redis.call('HGET', job_key, 'enqueue_at_front') == '1' then
+                redis.call('LPUSH', queue_key_prefix .. origin, job_id)
             else
-                redis.call('RPUSH', 'rq:queue:' .. origin, job_id)
+                redis.call('RPUSH', queue_key_prefix .. origin, job_id)
             end
-            redis.call('HSET', 'rq:job:' .. job_id, 'status', 'queued', 'enqueued_at', enqueued_at)
+            redis.call('HSET', job_key, 'status', 'queued', 'enqueued_at', enqueued_at)
             return job_id
         end
         -- stale rate_limited job (missing hash, no origin, or non-rate_limited status):
@@ -64,9 +69,9 @@ end
 return nil
 """
 
-# Release = remove the completed job from allowed (ARGV[4]) then run the acquire script.
-# ARGV: max_concurrency, timestamp, enqueued_at, completed_job_id
-RELEASE_AND_ENQUEUE_SCRIPT = "redis.call('ZREM', KEYS[1], ARGV[4])\n" + ACQUIRE_AND_ENQUEUE_SCRIPT
+# Release = remove the completed job from allowed (ARGV[6]) then run the acquire script.
+# ARGV: max_concurrency, timestamp, enqueued_at, queue_key_prefix, job_key_prefix, completed_job_id
+RELEASE_AND_ENQUEUE_SCRIPT = "redis.call('ZREM', KEYS[1], ARGV[6])\n" + ACQUIRE_AND_ENQUEUE_SCRIPT
 
 
 # Lua: if both allowed and rate_limited sets are empty, drop the key from rq:rl-keys
@@ -168,12 +173,20 @@ class RateLimitRegistry:
         Returns:
             The enqueued job_id, or None if no capacity or no rate_limited jobs.
         """
+        from .queue import Queue
+
         if enqueued_at is None:
             enqueued_at = now()
         timestamp = current_timestamp()
         result = self._acquire_script(
             keys=[self.allowed_key, self.rate_limited_key],
-            args=[max_concurrency, timestamp, utcformat(enqueued_at)],
+            args=[
+                max_concurrency,
+                timestamp,
+                utcformat(enqueued_at),
+                Queue.redis_queue_namespace_prefix,
+                Job.redis_job_namespace_prefix,
+            ],
         )
         if result is not None:
             return as_text(result)
@@ -191,10 +204,19 @@ class RateLimitRegistry:
         Returns:
             The enqueued job_id, or None if no rate_limited jobs.
         """
+        from .queue import Queue
+
         timestamp = current_timestamp()
         result = self._release_script(
             keys=[self.allowed_key, self.rate_limited_key],
-            args=[self.max_concurrency, timestamp, utcformat(now()), job_id],
+            args=[
+                self.max_concurrency,
+                timestamp,
+                utcformat(now()),
+                Queue.redis_queue_namespace_prefix,
+                Job.redis_job_namespace_prefix,
+                job_id,
+            ],
         )
         if result is not None:
             return as_text(result)
@@ -232,8 +254,6 @@ class RateLimitRegistry:
         Any other state — missing, terminal, scheduled or malformed — means the
         slot leaked and should be freed so rate_limited jobs can proceed.
         """
-        from .job import Job, JobStatus  # local import avoids circular import
-
         allowed_statuses = (JobStatus.QUEUED, JobStatus.STARTED)
         job_ids = self.get_allowed_job_ids()
         if not job_ids:

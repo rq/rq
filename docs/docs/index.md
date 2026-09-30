@@ -251,7 +251,10 @@ admitted job is placed on its queue.
 
 The key identifies the shared limit across all workers and queues using the same
 Redis database. A key has one concurrency setting, so every producer using that
-key must use the same `concurrency` value.
+key must use the same `concurrency` value. Rate limiting also requires the default
+key prefixes: enqueueing a rate-limited job raises `ValueError` if its job class
+overrides `redis_job_namespace_prefix` or its queue class overrides
+`redis_queue_namespace_prefix`.
 
 Rate limits also apply after scheduled jobs become due and after job dependencies
 are satisfied. An immediate retry keeps its slot; a delayed retry releases its
