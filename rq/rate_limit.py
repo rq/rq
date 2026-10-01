@@ -28,21 +28,21 @@ class RateLimit:
         self.concurrency = concurrency
 
 
-# Lua: if allowed < max_concurrency, pop the oldest rate_limited job (skipping stale
+# Lua: if allowed_count < concurrency, pop the oldest rate_limited job (skipping stale
 # entries), add it to allowed, push it onto its queue (front if enqueue_at_front is set)
 # and mark it queued. Returns the enqueued job_id or nil.
 # Job and queue keys depend on the popped job, so they're built from the passed prefixes.
 # KEYS: allowed_key, rate_limited_key
-# ARGV: max_concurrency, timestamp, enqueued_at, queue_key_prefix, job_key_prefix
+# ARGV: concurrency, timestamp, enqueued_at, queue_key_prefix, job_key_prefix
 ACQUIRE_AND_ENQUEUE_SCRIPT = """
 local allowed_count = redis.call('ZCARD', KEYS[1])
-local max_concurrency = tonumber(ARGV[1])
+local concurrency = tonumber(ARGV[1])
 local timestamp = tonumber(ARGV[2])
 local enqueued_at = ARGV[3]
 local queue_key_prefix = ARGV[4]
 local job_key_prefix = ARGV[5]
 
-if allowed_count < max_concurrency then
+if allowed_count < concurrency then
     while true do
         local result = redis.call('ZPOPMIN', KEYS[2])
         if #result == 0 then
@@ -70,13 +70,13 @@ return nil
 """
 
 # Release = remove the completed job from allowed (ARGV[6]) then run the acquire script.
-# ARGV: max_concurrency, timestamp, enqueued_at, queue_key_prefix, job_key_prefix, completed_job_id
+# ARGV: concurrency, timestamp, enqueued_at, queue_key_prefix, job_key_prefix, completed_job_id
 RELEASE_AND_ENQUEUE_SCRIPT = "redis.call('ZREM', KEYS[1], ARGV[6])\n" + ACQUIRE_AND_ENQUEUE_SCRIPT
 
 # Like RELEASE_AND_ENQUEUE_SCRIPT, but returns nil without releasing if the job is queued
 # or started, so a job that re-acquired its slot after cleanup read its status keeps it.
 # KEYS: allowed_key, rate_limited_key, job_key
-# ARGV: max_concurrency, timestamp, enqueued_at, queue_key_prefix, job_key_prefix, job_id
+# ARGV: concurrency, timestamp, enqueued_at, queue_key_prefix, job_key_prefix, job_id
 RELEASE_STALE_AND_ENQUEUE_SCRIPT = (
     """
 local status = redis.call('HGET', KEYS[3], 'status')
@@ -122,14 +122,14 @@ class RateLimitRegistry:
         self._release_stale_script = connection.register_script(RELEASE_STALE_AND_ENQUEUE_SCRIPT)
         self._cleanup_script = connection.register_script(CLEANUP_REGISTRY_SCRIPT)
 
-    def register(self, max_concurrency: int, pipeline: Pipeline) -> None:
+    def register(self, concurrency: int, pipeline: Pipeline) -> None:
         """Register this rate limit key and persist its config."""
         pipeline.sadd(self.rl_keys_key, self.key)
-        pipeline.hset(self.config_key, 'concurrency', max_concurrency)
+        pipeline.hset(self.config_key, 'concurrency', concurrency)
 
     @cached_property
-    def max_concurrency(self) -> int:
-        """Read max_concurrency from the config hash in Redis."""
+    def concurrency(self) -> int:
+        """Read and cache the concurrency limit from Redis; return 0 if unset."""
         value = self.connection.hget(self.config_key, 'concurrency')
         return int(value) if value else 0
 
@@ -173,7 +173,7 @@ class RateLimitRegistry:
             timestamp = current_timestamp()
         pipeline.zadd(self.rate_limited_key, {job_id: timestamp})
 
-    def acquire_and_enqueue(self, max_concurrency: int, enqueued_at: datetime | None = None) -> str | None:
+    def acquire_and_enqueue(self, concurrency: int, enqueued_at: datetime | None = None) -> str | None:
         """Try to enqueue the next rate_limited job.
 
         Atomically checks if there's capacity, and if so pops from rate_limited,
@@ -181,7 +181,7 @@ class RateLimitRegistry:
         pushes to the queue, and sets the job status to queued.
 
         Args:
-            max_concurrency: Maximum number of concurrent jobs allowed.
+            concurrency: Maximum number of jobs allowed to be queued or executing simultaneously.
             enqueued_at: The timestamp to record as the job's `enqueued_at`.
                 Defaults to the current time. Callers can pass this so they can
                 mirror the stored value onto the in-memory job without a re-read.
@@ -197,7 +197,7 @@ class RateLimitRegistry:
         result = self._acquire_script(
             keys=[self.allowed_key, self.rate_limited_key],
             args=[
-                max_concurrency,
+                concurrency,
                 timestamp,
                 utcformat(enqueued_at),
                 Queue.redis_queue_namespace_prefix,
@@ -226,7 +226,7 @@ class RateLimitRegistry:
         result = self._release_script(
             keys=[self.allowed_key, self.rate_limited_key],
             args=[
-                self.max_concurrency,
+                self.concurrency,
                 timestamp,
                 utcformat(now()),
                 Queue.redis_queue_namespace_prefix,
@@ -251,7 +251,7 @@ class RateLimitRegistry:
         result = self._release_stale_script(
             keys=[self.allowed_key, self.rate_limited_key, Job.key_for(job_id)],
             args=[
-                self.max_concurrency,
+                self.concurrency,
                 timestamp,
                 utcformat(now()),
                 Queue.redis_queue_namespace_prefix,
@@ -285,7 +285,7 @@ class RateLimitRegistry:
         was_allowed = self.connection.zrem(self.allowed_key, job_id)
         self.connection.zrem(self.rate_limited_key, job_id)
         if was_allowed:
-            return self.acquire_and_enqueue(self.max_concurrency)
+            return self.acquire_and_enqueue(self.concurrency)
         return None
 
     def _release_stale_allowed_jobs(self) -> None:
@@ -323,7 +323,7 @@ class RateLimitRegistry:
         """
         self._release_stale_allowed_jobs()
 
-        if self.max_concurrency and self.acquire_and_enqueue(self.max_concurrency):
+        if self.concurrency and self.acquire_and_enqueue(self.concurrency):
             return
 
         # Atomically remove registry if empty
