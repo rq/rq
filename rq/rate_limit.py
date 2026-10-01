@@ -139,6 +139,12 @@ class RateLimitRegistry:
         keys = connection.smembers(cls.rl_keys_key)
         return [cls(key=as_text(key), connection=connection) for key in keys]
 
+    @classmethod
+    def from_job(cls, job: Job) -> RateLimitRegistry:
+        """Return a registry for the job's rate limit key and connection."""
+        assert job.rate_limit_key
+        return cls(key=job.rate_limit_key, connection=job.connection)
+
     @property
     def config_key(self) -> str:
         return f'rq:rl:{self.key}'
@@ -331,3 +337,17 @@ class RateLimitRegistry:
             keys=[self.allowed_key, self.rate_limited_key, self.config_key],
             args=[self.rl_keys_key, self.key],
         )
+
+
+def release_slot(job: Job) -> str | None:
+    """Release the job's slot unless its cached status is queued or started, and
+    promote the next rate_limited job.
+
+    Call after the transaction setting the outcome commits, with the job's
+    cached status matching that outcome.
+
+    Returns the promoted job's ID, or None if no job is promoted.
+    """
+    if not job.has_rate_limit or job.get_status(refresh=False) in (JobStatus.QUEUED, JobStatus.STARTED):
+        return None
+    return RateLimitRegistry.from_job(job).release_and_enqueue(job.id)

@@ -590,14 +590,6 @@ class Job:
     def has_rate_limit(self) -> bool:
         return bool(self.rate_limit_key and self.rate_limit_concurrency)
 
-    @property
-    def should_release_rate_limit_slot(self) -> bool:
-        """Whether this rate-limited job's cached status permits releasing its slot (neither queued nor started).
-
-        Release only after the transaction establishing the final outcome commits.
-        """
-        return self.has_rate_limit and self.get_status(refresh=False) not in (JobStatus.QUEUED, JobStatus.STARTED)
-
     def should_enqueue_at_front(self) -> bool:
         """returns true when the argument enqueue_at_front_on_retry is true and the job has been executed at least once
         (i.e. ended_at is not None), otherwise returns the value of enqueue_at_front"""
@@ -1317,7 +1309,9 @@ class Job:
             q.enqueue_ready_jobs_by_queue(dependent_job_ids_by_queue)
 
         if self.has_rate_limit:
-            self.rate_limit_registry.cancel(self.id)
+            from .rate_limit import RateLimitRegistry
+
+            RateLimitRegistry.from_job(self).cancel(self.id)
 
         return dependent_job_ids_by_queue
 
@@ -1431,10 +1425,12 @@ class Job:
         connection.delete(self.key, self.dependents_key, self.dependencies_key)
 
         if self.has_rate_limit:
+            from .rate_limit import RateLimitRegistry
+
             # No-pipeline: remove + promote immediately (after the hash delete above).
             # Caller-owned pipeline: buffer the ZREMs into the caller's transaction without
             # promoting — the next release/acquire or maintenance cleanup promotes.
-            self.rate_limit_registry.cancel(self.id, pipeline=pipeline)
+            RateLimitRegistry.from_job(self).cancel(self.id, pipeline=pipeline)
 
     def delete_dependents(self, pipeline: Pipeline | None = None):
         """Delete jobs depending on this job.
@@ -1611,13 +1607,6 @@ class Job:
         return FinishedJobRegistry(
             self.origin, connection=self.connection, job_class=self.__class__, serializer=self.serializer
         )
-
-    @property
-    def rate_limit_registry(self):
-        from .rate_limit import RateLimitRegistry
-
-        assert self.rate_limit_key
-        return RateLimitRegistry(key=self.rate_limit_key, connection=self.connection)
 
     def send_webhooks(self, status: str | JobStatus, *, exc_string: str | None = None) -> None:
         """Sends every webhook registered for the given terminal job status.
