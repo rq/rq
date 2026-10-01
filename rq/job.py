@@ -424,11 +424,15 @@ class Job:
             status (JobStatus): The Job Status
         """
         if refresh:
-            status = self.connection.hget(self.key, 'status')
-            if not status:
-                raise InvalidJobOperation(f'Failed to retrieve status for job: {self.id}')
-            self._status = JobStatus(as_text(status))
+            self._status = self._fetch_status()
         return self._status
+
+    def _fetch_status(self) -> JobStatus:
+        """Reads the status stored in Redis without updating the cached status."""
+        status = self.connection.hget(self.key, 'status')
+        if not status:
+            raise InvalidJobOperation(f'Failed to retrieve status for job: {self.id}')
+        return JobStatus(as_text(status))
 
     def set_status(self, status: JobStatus, pipeline: Pipeline | None = None) -> None:
         """Set's the Job Status
@@ -585,6 +589,14 @@ class Job:
     @property
     def has_rate_limit(self) -> bool:
         return bool(self.rate_limit_key and self.rate_limit_concurrency)
+
+    @property
+    def should_release_rate_limit_slot(self) -> bool:
+        """Whether this rate-limited job's cached status permits releasing its slot (neither queued nor started).
+
+        Release only after the transaction establishing the final outcome commits.
+        """
+        return self.has_rate_limit and self.get_status(refresh=False) not in (JobStatus.QUEUED, JobStatus.STARTED)
 
     def should_enqueue_at_front(self) -> bool:
         """returns true when the argument enqueue_at_front_on_retry is true and the job has been executed at least once
@@ -1338,7 +1350,10 @@ class Job:
             q = Queue(name=self.origin, connection=self.connection, serializer=self.serializer)
             q.remove(self, pipeline=pipeline)
         registry: BaseRegistry
-        if self.is_finished:
+        # Read the stored status without overwriting the cached one, which the caller may have
+        # already changed in `pipeline` (e.g. FINISHED or FAILED before deleting the job).
+        status = self._fetch_status()
+        if status == JobStatus.FINISHED:
             from .registry import FinishedJobRegistry
 
             registry = FinishedJobRegistry(
@@ -1346,7 +1361,7 @@ class Job:
             )
             registry.remove(self, pipeline=pipeline)
 
-        elif self.is_deferred:
+        elif status == JobStatus.DEFERRED:
             from .registry import DeferredJobRegistry
 
             registry = DeferredJobRegistry(
@@ -1354,7 +1369,7 @@ class Job:
             )
             registry.remove(self, pipeline=pipeline)
 
-        elif self.is_ready_to_enqueue:
+        elif status == JobStatus.READY_TO_ENQUEUE:
             from .registry import ReadyJobRegistry
 
             registry = ReadyJobRegistry(
@@ -1362,7 +1377,7 @@ class Job:
             )
             registry.remove(self, pipeline=pipeline)
 
-        elif self.is_started:
+        elif status == JobStatus.STARTED:
             from .registry import StartedJobRegistry
 
             # TODO: need to cleanup job executions too
@@ -1371,7 +1386,7 @@ class Job:
             )
             registry.remove_executions(self, pipeline=pipeline)
 
-        elif self.is_scheduled:
+        elif status == JobStatus.SCHEDULED:
             from .registry import ScheduledJobRegistry
 
             registry = ScheduledJobRegistry(
@@ -1379,11 +1394,11 @@ class Job:
             )
             registry.remove(self, pipeline=pipeline)
 
-        elif self.is_failed or self.is_stopped:
+        elif status in (JobStatus.FAILED, JobStatus.STOPPED):
             # TODO: need to cleanup job executions too
             self.failed_job_registry.remove(self, pipeline=pipeline)
 
-        elif self.is_canceled:
+        elif status == JobStatus.CANCELED:
             from .registry import CanceledJobRegistry
 
             registry = CanceledJobRegistry(
@@ -1688,12 +1703,11 @@ class Job:
         execution_started_at: datetime,
         execution_ended_at: datetime,
         worker_name: str = '',
-    ) -> int:
+    ) -> None:
         """Handles jobs that return a Retry object as its result.
 
         Creates a RETRIED result record, increments number_of_retries,
-        and requeues or schedules the job for retry. Returns the retry
-        interval in seconds (0 for an immediate retry).
+        and requeues or schedules the job for retry.
 
         Args:
             queue (Queue): The queue to retry the job on
@@ -1735,7 +1749,6 @@ class Job:
                 self.id,
                 retry.max - (self.number_of_retries or 0),
             )
-        return retry_interval
 
     def get_retry_interval(self) -> int:
         """Returns the desired retry interval.
