@@ -6,6 +6,7 @@ from rq import Queue
 from rq.exceptions import DuplicateJobError
 from rq.job import JobStatus
 from rq.rate_limit import RateLimit
+from rq.scheduler import RQScheduler
 from tests import RQTestCase
 from tests.fixtures import say_hello
 
@@ -44,6 +45,46 @@ class TestEnqueueJobUnique(RQTestCase):
             queue.schedule_job(job2, scheduled_time, unique=True)
 
         self.assertIn('scheduled-unique-job', str(context.exception))
+
+    def test_enqueue_at_unique_raises_on_duplicate(self):
+        """enqueue_at and enqueue_in with unique=True raise DuplicateJobError for duplicate job_id."""
+        queue = Queue(connection=self.connection)
+        scheduled_time = datetime.now(timezone.utc) + timedelta(hours=1)
+
+        job = queue.enqueue_at(scheduled_time, say_hello, job_id='enqueue-at-unique-job', unique=True)
+        self.assertEqual(job.get_status(), JobStatus.SCHEDULED)
+        self.assertIn(job.id, queue.scheduled_job_registry)
+
+        with self.assertRaises(DuplicateJobError):
+            queue.enqueue_at(scheduled_time, say_hello, job_id='enqueue-at-unique-job', unique=True)
+
+        with self.assertRaises(DuplicateJobError):
+            queue.enqueue_in(timedelta(hours=1), say_hello, job_id='enqueue-at-unique-job', unique=True)
+
+    def test_scheduler_enqueues_unique_scheduled_job(self):
+        """RQScheduler moves a job scheduled with unique=True to its queue."""
+        queue = Queue(connection=self.connection)
+        scheduled_time = datetime.now(timezone.utc) - timedelta(seconds=1)
+        job = queue.enqueue_at(scheduled_time, say_hello, job_id='due-unique-job', unique=True)
+
+        scheduler = RQScheduler([queue], connection=self.connection)
+        scheduler.acquire_locks()
+        scheduler.enqueue_scheduled_jobs()
+
+        self.assertEqual(queue.job_ids, [job.id])
+        self.assertEqual(job.get_status(), JobStatus.QUEUED)
+        self.assertNotIn(job.id, queue.scheduled_job_registry)
+
+        with self.assertRaises(DuplicateJobError):
+            queue.enqueue(say_hello, job_id='due-unique-job', unique=True)
+
+    def test_enqueue_at_unique_requires_job_id(self):
+        """enqueue_at with unique=True without an explicit job_id raises ValueError."""
+        queue = Queue(connection=self.connection)
+        scheduled_time = datetime.now(timezone.utc) + timedelta(hours=1)
+
+        with self.assertRaises(ValueError):
+            queue.enqueue_at(scheduled_time, say_hello, unique=True)
 
     def test_unique_with_rate_limit_raises(self):
         """unique=True with a rate-limited job raises ValueError."""

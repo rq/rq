@@ -77,13 +77,16 @@ Jobs persist `rate_limit_key` and `rate_limit_concurrency` on their hash;
   a single shared body, so the two can't drift.
 
 Each operation runs as a single Lua script, so the capacity check and the promotion
-execute atomically in Redis and cannot interleave across concurrent workers.
+execute atomically in Redis and cannot interleave across concurrent workers. The
+promoted job is only known inside the script, so it builds the job and queue keys from
+the `Job` and `Queue` key prefixes passed as arguments. Enqueueing a rate-limited job
+is rejected when its job class or queue class overrides those prefixes.
 
 ## Interactions Worth Knowing
 
-- **Retries** — an immediate retry (interval 0) keeps its slot and reruns on it. A
-  delayed retry releases the slot — it may sit scheduled for hours, and holding a slot
-  that long would starve the key — then re-acquires when due.
+- **Retries and repeats** — a job holds its slot only while `queued` or `started`
+  (`rate_limit.release_slot`). An immediate retry or repeat keeps its slot; a
+  scheduled one releases it and re-acquires one when due.
 - **Cancel and delete** — both remove the job from the rate limit sets and promote the
   next waiting job.
 
@@ -94,7 +97,8 @@ releasing it, and deferred promotions leave freed capacity while jobs are still
 waiting. `RateLimitRegistry.cleanup()` reconciles this. It runs as part of
 `clean_registries`, the periodic registry maintenance performed by workers, and:
 
-1. Releases stale `allowed` entries and attempts to promote a waiter after each release.
+1. Releases `allowed` entries whose job is missing or no longer queued or started,
+   promoting a waiter after each release.
 2. Attempts another promotion in case capacity was freed elsewhere.
 3. Deletes the registry once both sets are empty.
 

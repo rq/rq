@@ -49,6 +49,7 @@ from ..job import Job, JobStatus, Retry
 from ..job_lifecycle import call_exception_handlers, format_exc_info
 from ..logutils import blue, green, setup_loghandlers
 from ..queue import Queue
+from ..rate_limit import release_slot
 from ..registry import StartedJobRegistry, clean_registries
 from ..results import Result
 from ..scheduler import RQScheduler
@@ -721,12 +722,10 @@ class BaseWorker:
     def handle_job_failure(
         self, job: Job, queue: Queue, started_job_registry=None, exc_string='', execution: Execution | None = None
     ):
-        """
-        Handles the failure or an executing job by:
-            1. Setting the job status to failed
-            2. Removing the job from StartedJobRegistry
-            3. Setting the workers current job to None
-            4. Add the job to FailedJobRegistry
+        """Handles the failure of an executing job.
+
+        Retries the job if it has retries left; otherwise marks it stopped or failed and enqueues
+        its dependents. Frees its rate limit slot unless the job was requeued.
         """
         self.log.debug('Worker %s: handling failed execution of job %s', self.name, job.id)
         with self.connection.pipeline() as pipeline:
@@ -735,8 +734,7 @@ class BaseWorker:
                     job.origin, self.connection, job_class=self.job_class, serializer=self.serializer
                 )
 
-            # check whether a job was stopped intentionally and set the job
-            # status appropriately if it was this job.
+            # A job stopped on request is marked STOPPED rather than FAILED and is never retried.
             job_is_stopped = self._stopped_job_id == job.id
             retry = job.should_retry and not job_is_stopped
 
@@ -744,7 +742,7 @@ class BaseWorker:
                 job.set_status(JobStatus.STOPPED, pipeline=pipeline)
                 self._stopped_job_id = None
             else:
-                # Requeue/reschedule if retry is configured, otherwise
+                # A retried job gets its status from job.retry() below.
                 if not retry:
                     job.set_status(JobStatus.FAILED, pipeline=pipeline)
 
@@ -770,8 +768,6 @@ class BaseWorker:
             if job.started_at and job.ended_at:
                 self.increment_total_working_time(job.ended_at - job.started_at, pipeline)
 
-            retry_interval = job.get_retry_interval() if retry else None
-
             if retry:
                 job.retry(queue, pipeline)
                 should_enqueue_dependents = False
@@ -780,23 +776,15 @@ class BaseWorker:
 
             try:
                 pipeline.execute()
-                # Fire failed webhooks only after the terminal failure is persisted, and
-                # skip retried/stopped jobs. Placed before enqueue_dependents (which can raise)
-                # so dispatch isn't lost if dependent enqueueing fails; send_webhooks never raises.
+                # Send webhooks once the failure is persisted, and before enqueue_dependents
+                # so an exception there can't skip them. send_webhooks never raises.
                 if not retry and not job_is_stopped:
                     job.send_webhooks(JobStatus.FAILED, exc_string=exc_string)
                 if should_enqueue_dependents:
                     queue.enqueue_dependents(job)
-                    if job.has_rate_limit:
-                        job.rate_limit_registry.release_and_enqueue(job.id)
-                elif retry and retry_interval and job.has_rate_limit:
-                    # Delayed retry: release the allowed slot so the scheduled retry can
-                    # re-acquire when due. Immediate retries (interval 0) keep the slot and
-                    # rerun on it.
-                    job.rate_limit_registry.release_and_enqueue(job.id)
+                release_slot(job)
             except Exception as e:
-                # Ensure that custom exception handlers are called
-                # even if Redis is down
+                # Log instead of raising if Redis is down or enqueueing dependents fails.
                 self.log.error(
                     'Worker %s: exception during pipeline execute or enqueue_dependents for job %s: %s',
                     self.name,
@@ -1397,8 +1385,10 @@ class BaseWorker:
         started_job_registry: StartedJobRegistry,
         execution: Execution,
     ):
-        """Handles the retry of certain job.
-        It will remove the job from the `StartedJobRegistry` and requeue or reschedule the job.
+        """Handles a job that returned a `Retry`.
+
+        Requeues or reschedules the job, or fails it once `retry.max` is reached. Frees its
+        rate limit slot unless the job was requeued.
 
         Args:
             job (Job): The job that will be retried.
@@ -1414,10 +1404,8 @@ class BaseWorker:
         execution_started_at = execution.created_at
         execution_ended_at = job.ended_at
 
-        # Check if job has exceeded max retries
         if job.number_of_retries and job.number_of_retries >= retry.max:
-            # If max retries exceeded, treat as a terminal failed job but persist
-            # a distinct result type so callers can differentiate it from errors.
+            # Fail the job, but record a distinct result type so callers can tell it apart from a raised error.
             self.log.warning('Worker %s: job %s has exceeded maximum retry attempts (%d)', self.name, job.id, retry.max)
             with self.connection.pipeline() as pipeline:
                 job.set_status(JobStatus.FAILED, pipeline=pipeline)
@@ -1440,12 +1428,11 @@ class BaseWorker:
 
                 try:
                     pipeline.execute()
-                    # Terminal failure (retries exhausted): fire failed webhooks after the failure is
-                    # persisted, before enqueue_dependents. No exception here, so exc_string is empty.
+                    # Send webhooks before enqueue_dependents so an exception there can't skip them.
+                    # No exception was raised, so exc_string is empty.
                     job.send_webhooks(JobStatus.FAILED, exc_string='')
                     queue.enqueue_dependents(job)
-                    if job.has_rate_limit:
-                        job.rate_limit_registry.release_and_enqueue(job.id)
+                    release_slot(job)
                 except Exception as e:
                     self.log.error(
                         'Worker %s: exception during pipeline execute or enqueue_dependents for job %s: %s',
@@ -1458,7 +1445,7 @@ class BaseWorker:
         with self.connection.pipeline() as pipeline:
             self.increment_failed_job_count(pipeline=pipeline)
             self.increment_total_working_time(job.ended_at - job.started_at, pipeline)  # type: ignore
-            retry_interval = job._handle_retry_result(
+            job._handle_retry_result(
                 queue=queue,
                 pipeline=pipeline,
                 retry=retry,
@@ -1470,10 +1457,7 @@ class BaseWorker:
             self.cleanup_execution(job, pipeline=pipeline, execution=execution)
             pipeline.execute()
 
-            # Delayed retry: release the allowed slot so the scheduled retry can re-acquire
-            # when due. Immediate retries (interval 0) keep the slot and rerun on it.
-            if retry_interval and job.has_rate_limit:
-                job.rate_limit_registry.release_and_enqueue(job.id)
+            release_slot(job)
 
             self.log.debug('Worker %s: finished handling retry of job %s', self.name, job.id)
 
@@ -1484,17 +1468,11 @@ class BaseWorker:
         started_job_registry: StartedJobRegistry,
         execution: Execution,
     ):
-        """Handles the successful execution of certain job.
-        It will remove the job from the `StartedJobRegistry`, adding it to the `SuccessfulJobRegistry`,
-        and run a few maintenance tasks including:
-            - Resting the current job ID
-            - Enqueue dependents
-            - Incrementing the job count and working time
-            - Handling of the job successful execution
-            - If job.repeats_left > 0, it will be scheduled for the next execution.
+        """Handles the successful execution of a job.
 
-        Runs within a loop with the `watch` method so that protects interactions
-        with dependents keys.
+        Saves the result unless `result_ttl` is 0, schedules the next repeat if any, enqueues
+        ready dependents and frees the rate limit slot unless the job was requeued. The
+        transaction is retried on `WatchError` when the job's dependents change.
 
         Args:
             job (Job): The job that was successful.
@@ -1507,16 +1485,15 @@ class BaseWorker:
         with self.connection.pipeline() as pipeline:
             while True:
                 try:
-                    # if dependencies are inserted after move_dependents_to_ready
-                    # a WatchError is thrown by execute()
+                    # execute() raises WatchError if a dependent is added after
+                    # move_dependents_to_ready reads them; the loop then retries.
                     pipeline.watch(job.dependents_key)
-                    # move_dependents_to_ready might call multi() on the pipeline
                     self.log.debug('Worker %s: moving dependents of job %s to ready', self.name, job.id)
                     dependent_job_ids_by_queue = queue.move_dependents_to_ready(job, pipeline=pipeline)
 
                     if not pipeline.explicit_transaction:
-                        # move_dependents_to_ready didn't call multi after all!
-                        # We have to do it ourselves to make sure everything runs in a transaction
+                        # move_dependents_to_ready starts the transaction only when it has
+                        # dependents to move; start it here otherwise.
                         self.log.debug('Worker %s: calling multi() on pipeline for job %s', self.name, job.id)
                         pipeline.multi()
 
@@ -1544,19 +1521,19 @@ class BaseWorker:
                         Repeat.schedule(job, queue, pipeline=pipeline)
                     else:
                         job.cleanup(result_ttl, pipeline=pipeline, remove_from_queue=False)
+                        # An aborted immediate repeat may have left the cached status QUEUED.
+                        job._status = JobStatus.FINISHED
 
                     self.log.debug('Cleaning up execution of job %s', job.id)
                     self.cleanup_execution(job, pipeline=pipeline, execution=execution)
 
                     pipeline.execute()
 
-                    # Drain ready dependents onto their origin queues now that the
-                    # deferred→ready transition has committed. Per-queue failures are
-                    # logged and left for ReadyJobRegistry.cleanup() to recover.
+                    # Enqueue the dependents that the commit moved to ready. Per-queue failures
+                    # are logged and left for ReadyJobRegistry.cleanup() to recover.
                     queue.enqueue_ready_jobs_by_queue(dependent_job_ids_by_queue)
 
-                    if job.has_rate_limit:
-                        job.rate_limit_registry.release_and_enqueue(job.id)
+                    release_slot(job)
 
                     assert job.started_at
                     assert job.ended_at
