@@ -22,8 +22,8 @@ class RateLimit:
     def __init__(self, key: str, concurrency: int):
         if not key:
             raise ValueError('key must not be empty')
-        if concurrency < 1:
-            raise ValueError('concurrency must be at least 1')
+        if not isinstance(concurrency, int) or concurrency < 1:
+            raise ValueError('concurrency must be an integer of at least 1')
         self.key = key
         self.concurrency = concurrency
 
