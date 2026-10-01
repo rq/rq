@@ -1,4 +1,8 @@
 from datetime import datetime
+from unittest import mock
+
+from redis import WatchError
+from redis.client import Pipeline
 
 from rq.exceptions import InvalidJobOperation
 from rq.executions import Execution
@@ -510,16 +514,80 @@ class TestRateLimitEnqueue(RQTestCase):
         self.assertEqual(rate_limit_registry.get_allowed_job_count(), 1)
         self.assertIn(job2.id, rate_limit_registry.get_allowed_job_ids())
 
-    def test_release_on_success_with_zero_result_ttl(self):
-        """A job whose result is discarded (result_ttl=0) is deleted on success and still
-        promotes the next rate_limited job."""
+    def test_release_when_ttl_zero_deletes_job(self):
+        """A job deleted on completion (result_ttl=0 or failure_ttl=0) still promotes
+        the next rate_limited job."""
         rate_limit = RateLimit(key='test', concurrency=1)
+        registry = RateLimitRegistry(key='test', connection=self.connection)
+
+        # Success with result_ttl=0
         job = self.queue.enqueue(say_hello, rate_limit=rate_limit, result_ttl=0)
         waiting_job = self.queue.enqueue(say_hello, rate_limit=rate_limit)
+        SimpleWorker([self.queue], connection=self.connection).work(max_jobs=1)
+        self.assertFalse(self.connection.exists(job.key))
+        self.assertEqual(waiting_job.get_status(), JobStatus.QUEUED)
+        self.assertEqual(registry.get_allowed_job_ids(), [waiting_job.id])
 
-        worker = SimpleWorker([self.queue], connection=self.connection)
-        worker.work(max_jobs=1)
+        self.connection.flushdb()
 
+        # Failure with failure_ttl=0
+        job = self.queue.enqueue(div_by_zero, rate_limit=rate_limit, failure_ttl=0)
+        waiting_job = self.queue.enqueue(say_hello, rate_limit=rate_limit)
+        SimpleWorker([self.queue], connection=self.connection).work(max_jobs=1)
+        self.assertFalse(self.connection.exists(job.key))
+        self.assertEqual(waiting_job.get_status(), JobStatus.QUEUED)
+        self.assertEqual(registry.get_allowed_job_ids(), [waiting_job.id])
+
+        self.connection.flushdb()
+
+        # Returned Retry exhausted with failure_ttl=0: the first run retries, the second fails.
+        job = self.queue.enqueue(returns_retry, rate_limit=rate_limit, failure_ttl=0)
+        waiting_job = self.queue.enqueue(say_hello, rate_limit=rate_limit)
+        SimpleWorker([self.queue], connection=self.connection).work(max_jobs=2)
+        self.assertFalse(self.connection.exists(job.key))
+        self.assertEqual(waiting_job.get_status(), JobStatus.QUEUED)
+        self.assertEqual(registry.get_allowed_job_ids(), [waiting_job.id])
+
+        self.connection.flushdb()
+
+        # Abandoned job with failure_ttl=0, failed by StartedJobRegistry.cleanup()
+        job = self.queue.enqueue(say_hello, rate_limit=rate_limit, failure_ttl=0)
+        waiting_job = self.queue.enqueue(say_hello, rate_limit=rate_limit)
+        self.queue.remove(job.id)
+        job.set_status(JobStatus.STARTED)
+        started_registry = StartedJobRegistry(connection=self.connection)
+        execution = Execution(id='execution', job_id=job.id, connection=self.connection)
+        with self.connection.pipeline() as pipe:
+            started_registry.add_execution(execution, pipe, ttl=0)
+            pipe.execute()
+        started_registry.cleanup()
+        self.assertFalse(self.connection.exists(job.key))
+        self.assertEqual(waiting_job.get_status(), JobStatus.QUEUED)
+        self.assertEqual(registry.get_allowed_job_ids(), [waiting_job.id])
+
+    def test_release_after_aborted_immediate_repeat(self):
+        """If the success transaction aborts after scheduling the last immediate repeat, the
+        retry deletes the job (result_ttl=0) and still promotes the next rate_limited job."""
+        rate_limit = RateLimit(key='test', concurrency=1)
+        job = self.queue.enqueue(say_hello, rate_limit=rate_limit, result_ttl=0, repeat=Repeat(times=1))
+        waiting_job = self.queue.enqueue(say_hello, rate_limit=rate_limit)
+
+        original_execute = Pipeline.execute
+        calls = {'n': 0}
+
+        def flaky_execute(self_pipe, *args, **kwargs):
+            # Only handle_job_success's transaction watches a key; abort it once.
+            if getattr(self_pipe, 'watching', False) and calls['n'] == 0:
+                calls['n'] += 1
+                # Real Pipeline.execute resets the pipe even on WatchError.
+                self_pipe.reset()
+                raise WatchError('simulated contention')
+            return original_execute(self_pipe, *args, **kwargs)
+
+        with mock.patch('redis.client.Pipeline.execute', flaky_execute):
+            SimpleWorker([self.queue], connection=self.connection).work(max_jobs=1)
+
+        self.assertEqual(calls['n'], 1)
         self.assertFalse(self.connection.exists(job.key))
         self.assertEqual(waiting_job.get_status(), JobStatus.QUEUED)
         registry = RateLimitRegistry(key='test', connection=self.connection)

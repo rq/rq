@@ -1522,8 +1522,7 @@ class BaseWorker:
                         Repeat.schedule(job, queue, pipeline=pipeline)
                     else:
                         job.cleanup(result_ttl, pipeline=pipeline, remove_from_queue=False)
-                        # With result_ttl=0, cleanup() deletes the job, which reloads the old status
-                        # from Redis. Restore FINISHED for the release check below.
+                        # An aborted immediate repeat may have left the cached status QUEUED.
                         job._status = JobStatus.FINISHED
 
                     self.log.debug('Cleaning up execution of job %s', job.id)
