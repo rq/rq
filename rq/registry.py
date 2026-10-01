@@ -218,12 +218,15 @@ class BaseRegistry:
         if not result:
             raise InvalidJobOperation
 
+        queue = Queue(job.origin, connection=self.connection, job_class=self.job_class, serializer=serializer)
+        job.started_at = None
+        job.ended_at = None
+        job._exc_info = ''  # TODO: this should be removed
+        if job.has_rate_limit:
+            # Requeued jobs must reacquire capacity.
+            job.enqueue_at_front = at_front
+            return queue._enqueue_rate_limited_job(job)
         with self.connection.pipeline() as pipeline:
-            queue = Queue(job.origin, connection=self.connection, job_class=self.job_class, serializer=serializer)
-            job.started_at = None
-            job.ended_at = None
-            job._exc_info = ''  # TODO: this should be removed
-            job.save()
             job = queue._enqueue_job(job, pipeline=pipeline, at_front=at_front)
             pipeline.execute()
         return job
@@ -264,14 +267,14 @@ class StartedJobRegistry(BaseRegistry):
     key_template = 'rq:wip:{0}'
 
     def cleanup(self, timestamp: float | None = None, exception_handlers: list | None = None):
-        """Remove abandoned jobs from registry and add them to FailedJobRegistry.
+        """Handles abandoned jobs whose execution expired before `timestamp`.
 
-        Removes jobs with an expiry time earlier than timestamp, specified as
-        seconds since the Unix epoch. timestamp defaults to call time if
-        unspecified. Removed jobs are added to the global failed job queue.
+        Each one is retried if it has retries left, otherwise moved to the FailedJobRegistry.
+        Its rate limit slot is freed unless the job was requeued.
 
         Args:
-            timestamp (datetime): The datetime to use as the limit.
+            timestamp (float, optional): Unix timestamp to use as the cutoff. Defaults to now.
+            exception_handlers (list, optional): Handlers to call for each abandoned job.
         """
         score = timestamp if timestamp is not None else current_timestamp()
         job_ids = self.get_expired_job_ids(score)
@@ -280,7 +283,7 @@ class StartedJobRegistry(BaseRegistry):
             return
 
         queue = self.get_queue()
-        jobs_to_release = []
+        processed_jobs = []
         failed_jobs = []
 
         with self.connection.pipeline() as pipeline:
@@ -295,10 +298,8 @@ class StartedJobRegistry(BaseRegistry):
                 if job.get_status(refresh=False) != JobStatus.STARTED:
                     continue
 
-                # No real failure traceback exists for an abandoned job (the work-horse died
-                # in another process), so pass None in the exc_info traceback slot.
-                # A raising failure callback must not abort the batch or stop the job from
-                # being moved to the FailedJobRegistry, so log and swallow it here.
+                # The work-horse died in another process, so there is no traceback to pass.
+                # A raising callback must not abort the batch, so log and swallow it.
                 try:
                     execute_failure_callback(
                         job, self.death_penalty_class, AbandonedJobError, AbandonedJobError(), None
@@ -310,8 +311,6 @@ class StartedJobRegistry(BaseRegistry):
                     call_exception_handlers(exception_handlers, job, AbandonedJobError, AbandonedJobError(), None)
 
                 retry = job.retries_left and job.retries_left > 0
-                retry_interval = job.get_retry_interval() if retry else None
-                is_immediate_retry = retry and not retry_interval
 
                 if retry:
                     job.retry(queue, pipeline)
@@ -321,14 +320,11 @@ class StartedJobRegistry(BaseRegistry):
                     )
                     logger.warning('%s cleanup: %s %s', self.__class__.__name__, job.id, exc_string)
                     record_job_failure(job, exc_string, pipeline)
-                    # don't refresh the job status, because the job state is still in the pipeline
+                    # Use the cached status: FAILED is still buffered in the pipeline.
                     queue.enqueue_dependents(job, refresh_job_status=False)
                     failed_jobs.append((job, exc_string))
 
-                # Final failures and scheduled (delayed) retries release the slot; immediate
-                # retries keep it — the job is back on the queue and reruns on the slot it owns.
-                if job.has_rate_limit and not is_immediate_retry:
-                    jobs_to_release.append(job)
+                processed_jobs.append(job)
 
             pipeline.zremrangebyscore(self.key, 0, score)
             pipeline.execute()
@@ -337,10 +333,10 @@ class StartedJobRegistry(BaseRegistry):
         for failed_job, exc_string in failed_jobs:
             failed_job.send_webhooks(JobStatus.FAILED, exc_string=exc_string)
 
-        # Release after the transaction commits so promotion observes the persisted
-        # failure state and its result is acted on directly.
-        for job in jobs_to_release:
-            job.rate_limit_registry.release_and_enqueue(job.id)
+        # Release only after the commit, so promotion sees each job's persisted status.
+        for job in processed_jobs:
+            if job.should_release_rate_limit_slot:
+                job.rate_limit_registry.release_and_enqueue(job.id)
 
     def add_execution(self, execution: Execution, pipeline: Pipeline, ttl: int = 0, xx: bool = False) -> int:
         """Adds an execution to a registry with expiry time of now + ttl, unless it's -1 which is set to +inf
