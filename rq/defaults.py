@@ -4,7 +4,7 @@ RQ_KEY_PREFIX = os.environ.get('RQ_KEY_PREFIX', 'rq')
 """The prefix used for all Redis keys managed by RQ.
 Override via the RQ_KEY_PREFIX environment variable before importing rq."""
 
-RQ_KEY_PREFIX_FORMAT_SAFE = RQ_KEY_PREFIX.replace('{', '{{').replace('}', '}}')
+KEY_PREFIX = RQ_KEY_PREFIX.replace('{', '{{').replace('}', '}}')
 """RQ_KEY_PREFIX with braces escaped, for key templates passed through `str.format()`.
 Needed for Redis Cluster hash tags such as `{rq}`."""
 
