@@ -73,6 +73,21 @@ return nil
 # ARGV: max_concurrency, timestamp, enqueued_at, queue_key_prefix, job_key_prefix, completed_job_id
 RELEASE_AND_ENQUEUE_SCRIPT = "redis.call('ZREM', KEYS[1], ARGV[6])\n" + ACQUIRE_AND_ENQUEUE_SCRIPT
 
+# Like RELEASE_AND_ENQUEUE_SCRIPT, but returns nil without releasing if the job is queued
+# or started, so a job that re-acquired its slot after cleanup read its status keeps it.
+# KEYS: allowed_key, rate_limited_key, job_key
+# ARGV: max_concurrency, timestamp, enqueued_at, queue_key_prefix, job_key_prefix, job_id
+RELEASE_STALE_AND_ENQUEUE_SCRIPT = (
+    """
+local status = redis.call('HGET', KEYS[3], 'status')
+if status == 'queued' or status == 'started' then
+    return nil
+end
+redis.call('ZREM', KEYS[1], ARGV[6])
+"""
+    + ACQUIRE_AND_ENQUEUE_SCRIPT
+)
+
 
 # Lua: if both allowed and rate_limited sets are empty, drop the key from rq:rl-keys
 # and delete the config hash and sorted sets. Returns 1 if cleaned up, 0 if not empty.
@@ -104,6 +119,7 @@ class RateLimitRegistry:
         self.connection = connection
         self._acquire_script = connection.register_script(ACQUIRE_AND_ENQUEUE_SCRIPT)
         self._release_script = connection.register_script(RELEASE_AND_ENQUEUE_SCRIPT)
+        self._release_stale_script = connection.register_script(RELEASE_STALE_AND_ENQUEUE_SCRIPT)
         self._cleanup_script = connection.register_script(CLEANUP_REGISTRY_SCRIPT)
 
     def register(self, max_concurrency: int, pipeline: Pipeline) -> None:
@@ -222,6 +238,31 @@ class RateLimitRegistry:
             return as_text(result)
         return None
 
+    def release_stale_and_enqueue(self, job_id: str) -> str | None:
+        """Release the job's slot unless it is queued or started, then enqueue the next
+        rate_limited job. The status check and release are atomic.
+
+        Returns:
+            The enqueued job_id, or None.
+        """
+        from .queue import Queue
+
+        timestamp = current_timestamp()
+        result = self._release_stale_script(
+            keys=[self.allowed_key, self.rate_limited_key, Job.key_for(job_id)],
+            args=[
+                self.max_concurrency,
+                timestamp,
+                utcformat(now()),
+                Queue.redis_queue_namespace_prefix,
+                Job.redis_job_namespace_prefix,
+                job_id,
+            ],
+        )
+        if result is not None:
+            return as_text(result)
+        return None
+
     def cancel(self, job_id: str, pipeline: Pipeline | None = None) -> str | None:
         """Remove a job from rate limit tracking and enqueue the next rate_limited job if needed.
 
@@ -269,7 +310,8 @@ class RateLimitRegistry:
         for job_id, raw_status in zip(job_ids, raw_statuses):
             status = as_text(raw_status) if raw_status else None
             if status not in allowed_statuses:
-                self.release_and_enqueue(job_id)
+                # The status read above may be stale by now; the script re-checks it.
+                self.release_stale_and_enqueue(job_id)
 
     def cleanup(self) -> None:
         """Free stale allowed slots, enqueue rate_limited jobs if there is available
