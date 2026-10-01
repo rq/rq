@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest import mock
 
 from redis import WatchError
@@ -845,11 +845,14 @@ class TestRateLimitRetry(RQTestCase):
 
     def test_delayed_retry_releases_slot(self):
         """A delayed retry of a rate-limited job releases its slot, which lets
-        a rate_limited same-key job promote into the freed capacity."""
+        a rate_limited same-key job promote into the freed capacity. The retry
+        keeps its front-of-queue priority while waiting for capacity."""
         rate_limit = RateLimit(key='test', concurrency=1)
 
         # job1 will fail with delayed retry; job2 sits in rate_limited.
-        job1 = self.queue.enqueue(div_by_zero, rate_limit=rate_limit, retry=Retry(max=1, interval=30))
+        job1 = self.queue.enqueue(
+            div_by_zero, rate_limit=rate_limit, retry=Retry(max=1, interval=30, enqueue_at_front=True)
+        )
         job2 = self.queue.enqueue(say_hello, rate_limit=rate_limit)
         self.assertEqual(job1.get_status(), JobStatus.QUEUED)
         self.assertEqual(job2.get_status(), JobStatus.RATE_LIMITED)
@@ -864,6 +867,18 @@ class TestRateLimitRetry(RQTestCase):
         registry = RateLimitRegistry(key='test', connection=self.connection)
         self.assertNotIn(job1.id, registry.get_allowed_job_ids())
         self.assertIn(job2.id, registry.get_allowed_job_ids())
+
+        # Due retry waits behind job2's slot.
+        regular_job = self.queue.enqueue(say_hello)
+        ScheduledJobRegistry(queue=self.queue).schedule(job1, datetime(2019, 1, 1, tzinfo=timezone.utc))
+        scheduler = RQScheduler([self.queue], connection=self.connection)
+        scheduler.acquire_locks()
+        scheduler.enqueue_scheduled_jobs()
+        self.assertEqual(job1.get_status(), JobStatus.RATE_LIMITED)
+
+        # Finishing job2 promotes job1 to the front of the queue.
+        worker.work(burst=True, max_jobs=1)
+        self.assertEqual(self.queue.job_ids, [job1.id, regular_job.id])
 
     def test_immediate_retry_keeps_slot(self):
         """A rate-limited job retrying with interval=0 keeps its allowed slot."""
