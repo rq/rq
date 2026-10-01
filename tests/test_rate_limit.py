@@ -61,6 +61,28 @@ class TestRateLimitJob(RQTestCase):
         job.rate_limit_concurrency = 2
         self.assertTrue(job.has_rate_limit)
 
+    def test_should_release_rate_limit_slot(self):
+        """A rate-limited job keeps its slot only while queued or started."""
+        job = Job.create(func='tests.fixtures.say_hello', connection=self.connection)
+        job.rate_limit_key = 'key'
+        job.rate_limit_concurrency = 1
+
+        job.set_status(JobStatus.QUEUED)
+        self.assertFalse(job.should_release_rate_limit_slot)
+
+        job.set_status(JobStatus.STARTED)
+        self.assertFalse(job.should_release_rate_limit_slot)
+
+        job.set_status(JobStatus.SCHEDULED)
+        self.assertTrue(job.should_release_rate_limit_slot)
+
+        job.set_status(JobStatus.FINISHED)
+        self.assertTrue(job.should_release_rate_limit_slot)
+
+        unlimited_job = Job.create(func='tests.fixtures.say_hello', connection=self.connection)
+        unlimited_job.set_status(JobStatus.FINISHED)
+        self.assertFalse(unlimited_job.should_release_rate_limit_slot)
+
 
 class TestRateLimitRegistry(RQTestCase):
     """Test the RateLimitRegistry class."""
@@ -487,6 +509,21 @@ class TestRateLimitEnqueue(RQTestCase):
         rate_limit_registry = RateLimitRegistry(key='test', connection=self.connection)
         self.assertEqual(rate_limit_registry.get_allowed_job_count(), 1)
         self.assertIn(job2.id, rate_limit_registry.get_allowed_job_ids())
+
+    def test_release_on_success_with_zero_result_ttl(self):
+        """A job whose result is discarded (result_ttl=0) is deleted on success and still
+        promotes the next rate_limited job."""
+        rate_limit = RateLimit(key='test', concurrency=1)
+        job = self.queue.enqueue(say_hello, rate_limit=rate_limit, result_ttl=0)
+        waiting_job = self.queue.enqueue(say_hello, rate_limit=rate_limit)
+
+        worker = SimpleWorker([self.queue], connection=self.connection)
+        worker.work(max_jobs=1)
+
+        self.assertFalse(self.connection.exists(job.key))
+        self.assertEqual(waiting_job.get_status(), JobStatus.QUEUED)
+        registry = RateLimitRegistry(key='test', connection=self.connection)
+        self.assertEqual(registry.get_allowed_job_ids(), [waiting_job.id])
 
     def test_release_on_failure(self):
         """Failing a rate-limited job releases capacity and enqueues the next rate_limited job."""

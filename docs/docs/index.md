@@ -253,11 +253,10 @@ The key identifies the shared limit across all workers and queues using the same
 Redis database. A key has one concurrency setting, so every producer using that
 key must use the same `concurrency` value.
 
-Rate limits also apply after scheduled jobs become due and after job dependencies
-are satisfied. An immediate retry keeps its slot; a delayed retry releases its
-slot and must acquire one again when it becomes due. Normal job completion,
-failure, cancellation, or deletion releases the slot and admits the next waiting
-job.
+Rate limits also apply when scheduled jobs become due and when job dependencies
+are satisfied. An immediate retry or repeat keeps its slot; a scheduled one
+releases it and re-acquires one when due. Completion, failure, cancellation or
+deletion releases the slot and admits the next waiting job.
 
 ## Job dependencies
 

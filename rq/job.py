@@ -586,6 +586,14 @@ class Job:
     def has_rate_limit(self) -> bool:
         return bool(self.rate_limit_key and self.rate_limit_concurrency)
 
+    @property
+    def should_release_rate_limit_slot(self) -> bool:
+        """Whether this rate-limited job's cached status permits releasing its slot (neither queued nor started).
+
+        Release only after the transaction establishing the final outcome commits.
+        """
+        return self.has_rate_limit and self.get_status(refresh=False) not in (JobStatus.QUEUED, JobStatus.STARTED)
+
     def should_enqueue_at_front(self) -> bool:
         """returns true when the argument enqueue_at_front_on_retry is true and the job has been executed at least once
         (i.e. ended_at is not None), otherwise returns the value of enqueue_at_front"""
@@ -1688,12 +1696,11 @@ class Job:
         execution_started_at: datetime,
         execution_ended_at: datetime,
         worker_name: str = '',
-    ) -> int:
+    ) -> None:
         """Handles jobs that return a Retry object as its result.
 
         Creates a RETRIED result record, increments number_of_retries,
-        and requeues or schedules the job for retry. Returns the retry
-        interval in seconds (0 for an immediate retry).
+        and requeues or schedules the job for retry.
 
         Args:
             queue (Queue): The queue to retry the job on
@@ -1735,7 +1742,6 @@ class Job:
                 self.id,
                 retry.max - (self.number_of_retries or 0),
             )
-        return retry_interval
 
     def get_retry_interval(self) -> int:
         """Returns the desired retry interval.
