@@ -32,11 +32,13 @@ class TestRateLimit(RQTestCase):
             RateLimit(key='', concurrency=1)
 
     def test_invalid_concurrency_raises(self):
-        """RateLimit raises ValueError for concurrency < 1."""
+        """RateLimit raises ValueError for concurrency that isn't an integer >= 1."""
         with self.assertRaises(ValueError):
             RateLimit(key='test', concurrency=0)
         with self.assertRaises(ValueError):
             RateLimit(key='test', concurrency=-1)
+        with self.assertRaises(ValueError):
+            RateLimit(key='test', concurrency=1.5)
 
 
 class TestRateLimitJob(RQTestCase):
