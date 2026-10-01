@@ -218,12 +218,15 @@ class BaseRegistry:
         if not result:
             raise InvalidJobOperation
 
+        queue = Queue(job.origin, connection=self.connection, job_class=self.job_class, serializer=serializer)
+        job.started_at = None
+        job.ended_at = None
+        job._exc_info = ''  # TODO: this should be removed
+        if job.has_rate_limit:
+            # Requeued jobs must reacquire capacity.
+            job.enqueue_at_front = at_front
+            return queue._enqueue_rate_limited_job(job)
         with self.connection.pipeline() as pipeline:
-            queue = Queue(job.origin, connection=self.connection, job_class=self.job_class, serializer=serializer)
-            job.started_at = None
-            job.ended_at = None
-            job._exc_info = ''  # TODO: this should be removed
-            job.save()
             job = queue._enqueue_job(job, pipeline=pipeline, at_front=at_front)
             pipeline.execute()
         return job

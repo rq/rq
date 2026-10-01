@@ -612,6 +612,42 @@ class TestRateLimitEnqueue(RQTestCase):
         self.assertEqual(rate_limit_registry.get_allowed_job_count(), 1)
         self.assertIn(job2.id, rate_limit_registry.get_allowed_job_ids())
 
+    def test_requeue_waits_for_capacity(self):
+        """A requeued rate-limited job waits for a slot instead of bypassing the limiter, and
+        its promotion ignores the original front-placement flag."""
+        rate_limit = RateLimit(key='test', concurrency=1)
+        registry = RateLimitRegistry(key='test', connection=self.connection)
+
+        failed_job = self.queue.enqueue(div_by_zero, 1, rate_limit=rate_limit, at_front=True)
+        worker = SimpleWorker([self.queue], connection=self.connection)
+        worker.work(max_jobs=1)
+        self.assertEqual(failed_job.get_status(), JobStatus.FAILED)
+
+        blocking_job = self.queue.enqueue(say_hello, rate_limit=rate_limit)
+        plain_job = self.queue.enqueue(say_hello)
+        requeued_job = failed_job.requeue()
+        self.assertEqual(requeued_job.get_status(refresh=False), JobStatus.RATE_LIMITED)
+        self.assertEqual(self.queue.job_ids, [blocking_job.id, plain_job.id])
+        self.assertEqual(registry.get_allowed_job_ids(), [blocking_job.id])
+        self.assertEqual(registry.get_rate_limited_job_ids(), [failed_job.id])
+
+        # Finishing blocking_job promotes the requeued job to the back of the queue.
+        worker.work(max_jobs=1)
+        self.assertEqual(failed_job.get_status(), JobStatus.QUEUED)
+        self.assertEqual(self.queue.job_ids, [plain_job.id, failed_job.id])
+        self.assertEqual(registry.get_allowed_job_ids(), [failed_job.id])
+
+    def test_requeue_at_front(self):
+        """requeue(at_front=True) places a rate-limited job at the front of its queue."""
+        rate_limit = RateLimit(key='test', concurrency=1)
+
+        failed_job = self.queue.enqueue(div_by_zero, 1, rate_limit=rate_limit)
+        SimpleWorker([self.queue], connection=self.connection).work(max_jobs=1)
+
+        plain_job = self.queue.enqueue(say_hello)
+        failed_job.requeue(at_front=True)
+        self.assertEqual(self.queue.job_ids, [failed_job.id, plain_job.id])
+
     def test_cancel_removes_from_registry_and_promotes_rate_limited(self):
         """Canceling a rate_limited rate-limited job removes it (without promotion);
         canceling the allowed job frees its slot and promotes the next rate_limited job.
