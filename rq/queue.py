@@ -1176,9 +1176,14 @@ class Queue:
 
         Returns:
             Job: The scheduled job
+
+        Raises:
+            ValueError: If the job is rate limited and its class or this queue's class overrides
+                the default key prefix
         """
         from .registry import ScheduledJobRegistry
 
+        self._check_rate_limit_namespace(job)
         registry = ScheduledJobRegistry(queue=self)
 
         if unique and not job._id:
@@ -1229,7 +1234,10 @@ class Queue:
 
         Raises:
             ValueError: If unique=True and job has dependencies
+            ValueError: If the job is rate limited and its class or this queue's class overrides
+                the default key prefix
         """
+        self._check_rate_limit_namespace(job)
         if unique and not job._id:
             raise ValueError('unique=True requires an explicit job_id')
         if unique and job._dependency_ids:
@@ -1252,6 +1260,15 @@ class Queue:
                 return self._enqueue_rate_limited_job(job, pipeline=pipeline, at_front=at_front)
             return self._enqueue_job(job, pipeline=pipeline, at_front=at_front, unique=unique)
         return job
+
+    def _check_rate_limit_namespace(self, job: Job) -> None:
+        """Rejects a rate-limited job whose class or this queue's class overrides the default
+        key prefix, since the rate limiter builds keys from the base `Job` and `Queue` prefixes."""
+        if job.has_rate_limit and (
+            job.redis_job_namespace_prefix != Job.redis_job_namespace_prefix
+            or self.redis_queue_namespace_prefix != Queue.redis_queue_namespace_prefix
+        ):
+            raise ValueError('rate_limit is not supported with custom job or queue key prefixes')
 
     def _enqueue_rate_limited_job(self, job: Job, pipeline: Pipeline | None = None, at_front: bool = False) -> Job:
         """Enqueue a job through the rate limit registry.
