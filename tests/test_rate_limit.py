@@ -297,6 +297,51 @@ class TestRateLimitRegistry(RQTestCase):
         self.assertIn(rate_limited_job.id, self.queue.job_ids)
         self.assertEqual(rate_limited_job.get_status(), JobStatus.QUEUED)
 
+    def test_release_stale_and_enqueue(self):
+        """release_stale_and_enqueue keeps the slot of a queued or started job and
+        releases it otherwise, promoting the next rate_limited job."""
+        registry = self.rate_limit_registry  # concurrency 2
+        queued_job = self._make_job(status=JobStatus.QUEUED)
+        started_job = self._make_job(status=JobStatus.STARTED)
+        waiting_job = self._make_job(status=JobStatus.RATE_LIMITED)
+        self.connection.zadd(registry.allowed_key, {queued_job.id: 1, started_job.id: 2})
+        self._add_to_rate_limited(waiting_job.id)
+
+        self.assertIsNone(registry.release_stale_and_enqueue(queued_job.id))
+        self.assertEqual(registry.get_allowed_job_ids(), [queued_job.id, started_job.id])
+
+        self.assertIsNone(registry.release_stale_and_enqueue(started_job.id))
+        self.assertEqual(registry.get_allowed_job_ids(), [queued_job.id, started_job.id])
+
+        self.connection.hset(started_job.key, 'status', JobStatus.FAILED)
+        self.assertEqual(registry.release_stale_and_enqueue(started_job.id), waiting_job.id)
+        self.assertEqual(registry.get_allowed_job_ids(), [queued_job.id, waiting_job.id])
+
+    def test_cleanup_keeps_slot_reacquired_after_status_read(self):
+        """A job that re-acquires its slot after cleanup reads its stale status keeps the slot."""
+        registry = RateLimitRegistry(key='solo', connection=self.connection)
+        with self.connection.pipeline() as pipe:
+            registry.register(1, pipe)
+            pipe.execute()
+
+        reacquired_job = self._make_job(status=JobStatus.SCHEDULED)
+        waiting_job = self._make_job(status=JobStatus.RATE_LIMITED)
+        self.connection.zadd(registry.allowed_key, {reacquired_job.id: 1})
+        self._add_to_rate_limited_for(registry, waiting_job.id)
+
+        original_execute = Pipeline.execute
+
+        # Mark the job queued right after cleanup's status read, as if it re-acquired its slot.
+        def execute_then_mark_queued(self_pipe, *args, **kwargs):
+            result = original_execute(self_pipe, *args, **kwargs)
+            self.connection.hset(reacquired_job.key, 'status', JobStatus.QUEUED)
+            return result
+
+        with mock.patch('redis.client.Pipeline.execute', execute_then_mark_queued):
+            registry.cleanup()
+
+        self.assertEqual(registry.get_allowed_job_ids(), [reacquired_job.id])
+
     def test_cleanup_skips_non_rate_limited_entry(self):
         """A rate_limited entry that can't be promoted — a stale id with no job hash,
         or a job in a non-rate_limited state (e.g. canceled) — is pruned without being
