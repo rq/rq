@@ -251,7 +251,8 @@ admitted job is placed on its queue.
 
 The key identifies the shared limit across all workers and queues using the same
 Redis database. A key has one concurrency setting, so every producer using that
-key must use the same `concurrency` value.
+key must use the same `concurrency` value. If they differ, the key can admit as
+many jobs as the largest value.
 
 Rate limits also apply when scheduled jobs become due and when job dependencies
 are satisfied. An immediate retry or repeat keeps its slot; a scheduled one

@@ -1,9 +1,32 @@
 ### RQ 3.0 (unreleased)
+
+New Features:
+* Added [concurrency rate limits](https://python-rq.org/docs/#concurrency-rate-limits) via `queue.enqueue(func, rate_limit=RateLimit(...))`. Thanks @selwin!
+* Workers can now track multiple executions, exposed via `worker.get_current_executions()` and `worker.current_execution_count`. Thanks @selwin!
+* Added `send_stop_execution_command()` to stop a single execution of a job. Thanks @selwin!
+* `Execution` now stores its job ID. Thanks @selwin!
+
+Breaking Changes:
+* RQ now requires `redis-py` >= 5.0.1. Thanks @selwin!
+* Dependent jobs now pass through a new `READY_TO_ENQUEUE` status and `ReadyJobRegistry` before being enqueued. Thanks @selwin!
+* `Queue.enqueue_dependents()` no longer accepts `pipeline`; use `Queue.move_dependents_to_ready()` followed by `Queue.enqueue_ready_jobs_by_queue()` instead. Thanks @selwin!
+* `job.cancel(enqueue_dependents=True, pipeline=pipeline)` requires a watched pipeline and no longer enqueues dependents; pass its return value to `Queue.enqueue_ready_jobs_by_queue()` after executing the pipeline. Thanks @selwin!
+* `rate_limit` is now a reserved keyword argument of `queue.enqueue()` and `EnqueueArgs` has a new `rate_limit` field. Thanks @selwin!
+* `Worker.perform_job()`, `handle_job_success()`, `monitor_work_horse()` and `maintain_heartbeats()` now require an `execution` argument, affecting subclasses that override or call them. Thanks @selwin!
+* Removed `worker.set_current_job_id()`, `worker.current_job_working_time` and `worker.set_current_job_working_time()`; workers no longer store `current_job` in their Redis hash. Thanks @selwin!
+* `worker.get_current_job_id()` no longer accepts a `pipeline` argument. Thanks @selwin!
+* `Job.execute_success_callback()`, `execute_failure_callback()` and `execute_stopped_callback()` are replaced by functions of the same name in `rq.callbacks`. Thanks @selwin!
+* Failure callbacks and exception handlers invoked for abandoned jobs now receive `None` as the traceback. Thanks @selwin!
 * `Job.perform()` no longer removes the job key's TTL. Job key TTL changes are now handled by workers. Thanks @selwin!
-* Refactored how job dependencies are handled. Introduced `READY_TO_ENQUEUE` job status and ReadyJobRegistry. Thanks @selwin!
 * `get_current_job()` now uses `contextvars` instead of thread-locals; gevent-based custom workers need `greenlet` >= 0.4.17. Thanks @selwin!
-* `Worker.handle_job_success()` now requires an `execution` argument, a breaking change for subclasses that override or call this method. Thanks @selwin!
 * RQ now disables propagation on loggers it configures itself to prevent double logging when applications configure logging afterwards. Thanks @selwin!
+
+Bug Fixes:
+* `enqueue_at()` and `enqueue_in()` now honor `unique=True`. Thanks @jamalkamaladdin!
+* Job repeats are now scheduled against UTC instead of the local wall clock. Thanks @dylanpulver!
+* `StartedJobRegistry.cleanup()` no longer marks finished jobs as abandoned. Thanks @gyanu2507!
+* `StartedJobRegistry.cleanup()` now sends `failed` webhooks for abandoned jobs and no longer aborts when a failure callback raises. Thanks @selwin!
+* Event loops are now closed after coroutine jobs finish. Thanks @Kuang-xianxin!
 
 ### RQ 2.12.0 (2026-08-30)
 * Added `CronJobRegistry` so cron job histories can be monitored without an active `CronScheduler`. Thanks @selwin!
