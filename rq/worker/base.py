@@ -48,6 +48,7 @@ from ..job import Job, JobStatus, Retry
 from ..job_lifecycle import call_exception_handlers, format_exc_info
 from ..logutils import blue, green, setup_loghandlers
 from ..queue import Queue
+from ..rate_limit import release_slot
 from ..registry import StartedJobRegistry, clean_registries
 from ..results import Result
 from ..scheduler import RQScheduler
@@ -780,8 +781,7 @@ class BaseWorker:
                     job.send_webhooks(JobStatus.FAILED, exc_string=exc_string)
                 if should_enqueue_dependents:
                     queue.enqueue_dependents(job)
-                if job.should_release_rate_limit_slot:
-                    job.rate_limit_registry.release_and_enqueue(job.id)
+                release_slot(job)
             except Exception as e:
                 # Log instead of raising if Redis is down or enqueueing dependents fails.
                 self.log.error(
@@ -1431,8 +1431,7 @@ class BaseWorker:
                     # No exception was raised, so exc_string is empty.
                     job.send_webhooks(JobStatus.FAILED, exc_string='')
                     queue.enqueue_dependents(job)
-                    if job.should_release_rate_limit_slot:
-                        job.rate_limit_registry.release_and_enqueue(job.id)
+                    release_slot(job)
                 except Exception as e:
                     self.log.error(
                         'Worker %s: exception during pipeline execute or enqueue_dependents for job %s: %s',
@@ -1457,8 +1456,7 @@ class BaseWorker:
             self.cleanup_execution(job, pipeline=pipeline, execution=execution)
             pipeline.execute()
 
-            if job.should_release_rate_limit_slot:
-                job.rate_limit_registry.release_and_enqueue(job.id)
+            release_slot(job)
 
             self.log.debug('Worker %s: finished handling retry of job %s', self.name, job.id)
 
@@ -1534,8 +1532,7 @@ class BaseWorker:
                     # are logged and left for ReadyJobRegistry.cleanup() to recover.
                     queue.enqueue_ready_jobs_by_queue(dependent_job_ids_by_queue)
 
-                    if job.should_release_rate_limit_slot:
-                        job.rate_limit_registry.release_and_enqueue(job.id)
+                    release_slot(job)
 
                     assert job.started_at
                     assert job.ended_at

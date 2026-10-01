@@ -19,7 +19,7 @@ from .exceptions import AbandonedJobError, InvalidJobOperation, NoSuchJobError
 from .job import Job, JobStatus
 from .job_lifecycle import call_exception_handlers, record_job_failure
 from .queue import Queue
-from .rate_limit import RateLimitRegistry
+from .rate_limit import RateLimitRegistry, release_slot
 from .timeouts import BaseDeathPenalty, UnixSignalDeathPenalty
 from .utils import as_text, backend_class, current_timestamp, now, parse_composite_key
 
@@ -335,8 +335,7 @@ class StartedJobRegistry(BaseRegistry):
 
         # Release only after the commit, so promotion sees each job's persisted status.
         for job in processed_jobs:
-            if job.should_release_rate_limit_slot:
-                job.rate_limit_registry.release_and_enqueue(job.id)
+            release_slot(job)
 
     def add_execution(self, execution: Execution, pipeline: Pipeline, ttl: int = 0, xx: bool = False) -> int:
         """Adds an execution to a registry with expiry time of now + ttl, unless it's -1 which is set to +inf
@@ -617,7 +616,7 @@ class ReadyJobRegistry(BaseRegistry):
                         queue._enqueue_rate_limited_job(job, pipeline=pipe)
                         pipe.execute()
                         assert job.rate_limit_concurrency
-                        job.rate_limit_registry.acquire_and_enqueue(job.rate_limit_concurrency)
+                        RateLimitRegistry.from_job(job).acquire_and_enqueue(job.rate_limit_concurrency)
                     else:
                         queue._enqueue_job(job, pipeline=pipe, at_front=job.should_enqueue_at_front())
                         pipe.execute()

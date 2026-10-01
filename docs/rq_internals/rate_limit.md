@@ -85,7 +85,7 @@ is rejected when its job class or queue class overrides those prefixes.
 ## Interactions Worth Knowing
 
 - **Retries and repeats** — a job holds its slot only while `queued` or `started`
-  (`Job.should_release_rate_limit_slot`). An immediate retry or repeat keeps its slot; a
+  (`rate_limit.release_slot`). An immediate retry or repeat keeps its slot; a
   scheduled one releases it and re-acquires one when due.
 - **Cancel and delete** — both remove the job from the rate limit sets and promote the
   next waiting job.

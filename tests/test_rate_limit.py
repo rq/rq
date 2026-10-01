@@ -8,7 +8,7 @@ from rq.exceptions import InvalidJobOperation
 from rq.executions import Execution
 from rq.job import Job, JobStatus, Retry
 from rq.queue import Queue
-from rq.rate_limit import RateLimit, RateLimitRegistry
+from rq.rate_limit import RateLimit, RateLimitRegistry, release_slot
 from rq.registry import ScheduledJobRegistry, StartedJobRegistry
 from rq.repeat import Repeat
 from rq.scheduler import RQScheduler
@@ -54,7 +54,6 @@ class TestRateLimitJob(RQTestCase):
         fetched = Job.fetch(job.id, connection=self.connection)
         self.assertEqual(fetched.rate_limit_key, 'my_key')
         self.assertEqual(fetched.rate_limit_concurrency, 3)
-        self.assertTrue(fetched.has_rate_limit)
 
     def test_has_rate_limit(self):
         """has_rate_limit returns True only when both fields are set."""
@@ -67,27 +66,46 @@ class TestRateLimitJob(RQTestCase):
         job.rate_limit_concurrency = 2
         self.assertTrue(job.has_rate_limit)
 
-    def test_should_release_rate_limit_slot(self):
-        """A rate-limited job keeps its slot only while queued or started."""
+    def test_release_slot(self):
+        """A rate-limited job releases its slot unless queued or started, returning the promoted job's ID."""
+        registry = RateLimitRegistry(key='key', connection=self.connection)
+        waiting_job = Job.create(
+            func='tests.fixtures.say_hello', connection=self.connection, origin='default', status=JobStatus.RATE_LIMITED
+        )
+        waiting_job.rate_limit_key = 'key'
+        waiting_job.rate_limit_concurrency = 1
+        waiting_job.save()
+        with self.connection.pipeline() as pipe:
+            registry.register(1, pipe)
+            registry.add_to_rate_limited(waiting_job.id, pipe)
+            pipe.execute()
+
         job = Job.create(func='tests.fixtures.say_hello', connection=self.connection)
         job.rate_limit_key = 'key'
         job.rate_limit_concurrency = 1
+        self.connection.zadd(registry.allowed_key, {job.id: 1})
 
         job.set_status(JobStatus.QUEUED)
-        self.assertFalse(job.should_release_rate_limit_slot)
+        release_slot(job)
+        self.assertIn(job.id, registry.get_allowed_job_ids())
 
         job.set_status(JobStatus.STARTED)
-        self.assertFalse(job.should_release_rate_limit_slot)
-
-        job.set_status(JobStatus.SCHEDULED)
-        self.assertTrue(job.should_release_rate_limit_slot)
+        release_slot(job)
+        self.assertIn(job.id, registry.get_allowed_job_ids())
 
         job.set_status(JobStatus.FINISHED)
-        self.assertTrue(job.should_release_rate_limit_slot)
+        self.assertEqual(release_slot(job), waiting_job.id)
+        self.assertNotIn(job.id, registry.get_allowed_job_ids())
 
-        unlimited_job = Job.create(func='tests.fixtures.say_hello', connection=self.connection)
-        unlimited_job.set_status(JobStatus.FINISHED)
-        self.assertFalse(unlimited_job.should_release_rate_limit_slot)
+        self.connection.zadd(registry.allowed_key, {job.id: 1})
+        job.set_status(JobStatus.SCHEDULED)
+        release_slot(job)
+        self.assertNotIn(job.id, registry.get_allowed_job_ids())
+
+        unlimited_job = Job.create(
+            func='tests.fixtures.say_hello', connection=self.connection, status=JobStatus.FINISHED
+        )
+        self.assertIsNone(release_slot(unlimited_job))
 
 
 class TestRateLimitRegistry(RQTestCase):

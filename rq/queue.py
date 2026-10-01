@@ -33,7 +33,7 @@ from .intermediate_queue import IntermediateQueue
 from .job import Job, JobStatus
 from .job_lifecycle import format_exc_info, record_job_failure
 from .logutils import blue, green
-from .rate_limit import RateLimit
+from .rate_limit import RateLimit, RateLimitRegistry
 from .repeat import Repeat
 from .scripts import save_unique_job, schedule_unique_job
 from .serializers import Serializer, resolve_serializer
@@ -1298,7 +1298,7 @@ class Queue:
 
         assert job.rate_limit_concurrency
 
-        registry = job.rate_limit_registry
+        registry = RateLimitRegistry.from_job(job)
         job._status = JobStatus.RATE_LIMITED
         if at_front:
             job.enqueue_at_front = True
