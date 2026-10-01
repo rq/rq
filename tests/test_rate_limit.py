@@ -124,13 +124,13 @@ class TestRateLimitRegistry(RQTestCase):
         """acquire_and_enqueue enqueues a rate_limited job when capacity is available,
         returns None when at capacity or no rate_limited jobs."""
         # No rate_limited jobs, nothing happens
-        result = self.rate_limit_registry.acquire_and_enqueue(max_concurrency=2)
+        result = self.rate_limit_registry.acquire_and_enqueue(concurrency=2)
         self.assertIsNone(result)
 
         job = self._make_job(status=JobStatus.RATE_LIMITED)
 
         self._add_to_rate_limited(job.id)
-        result = self.rate_limit_registry.acquire_and_enqueue(max_concurrency=2)
+        result = self.rate_limit_registry.acquire_and_enqueue(concurrency=2)
 
         self.assertEqual(result, job.id)
         self.assertEqual(self.rate_limit_registry.get_allowed_job_count(), 1)
@@ -143,7 +143,7 @@ class TestRateLimitRegistry(RQTestCase):
         # Now fill allowed set to capacity and verify nothing is enqueued
         self.connection.zadd(self.rate_limit_registry.allowed_key, {'allowed2': 2})
         self._add_to_rate_limited('job2')
-        result = self.rate_limit_registry.acquire_and_enqueue(max_concurrency=2)
+        result = self.rate_limit_registry.acquire_and_enqueue(concurrency=2)
 
         self.assertIsNone(result)
         self.assertEqual(self.rate_limit_registry.get_allowed_job_count(), 2)
@@ -157,7 +157,7 @@ class TestRateLimitRegistry(RQTestCase):
         self._add_to_rate_limited(job1.id, timestamp=1)
         self._add_to_rate_limited(job2.id, timestamp=2)
 
-        result = self.rate_limit_registry.acquire_and_enqueue(max_concurrency=1)
+        result = self.rate_limit_registry.acquire_and_enqueue(concurrency=1)
         self.assertEqual(result, job1.id)
         self.assertEqual(self.rate_limit_registry.get_rate_limited_job_ids(), [job2.id])
 
@@ -400,12 +400,12 @@ class TestRateLimitRegistry(RQTestCase):
 
         # Fill key_a to capacity
         self.connection.zadd(registry_a.allowed_key, {'x': 1})
-        result_a = registry_a.acquire_and_enqueue(max_concurrency=1)
+        result_a = registry_a.acquire_and_enqueue(concurrency=1)
         # key_a is full, should not enqueue
         self.assertIsNone(result_a)
 
         # key_b still has capacity
-        result_b = registry_b.acquire_and_enqueue(max_concurrency=1)
+        result_b = registry_b.acquire_and_enqueue(concurrency=1)
         self.assertEqual(result_b, job_b.id)
 
 
@@ -543,7 +543,7 @@ class TestRateLimitEnqueue(RQTestCase):
         registries = RateLimitRegistry.all(self.connection)
         self.assertEqual(len(registries), 1)
         self.assertEqual(registries[0].key, 'my_key')
-        self.assertEqual(registries[0].max_concurrency, 3)
+        self.assertEqual(registries[0].concurrency, 3)
 
     def test_cleanup_removes_empty_registry(self):
         """cleanup() removes registry from rq:rate-limiters when both sets are empty."""
