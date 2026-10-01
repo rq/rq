@@ -268,7 +268,7 @@ class RQScheduler:
             for job in jobs_with_rate_limit:
                 with self.connection.pipeline() as pipeline:
                     registry.remove(job.id, pipeline=pipeline)
-                    queue._enqueue_rate_limited_job(job, pipeline=pipeline)
+                    queue._enqueue_rate_limited_job(job, pipeline=pipeline, at_front=job.should_enqueue_at_front())
                     pipeline.execute()
                 assert job.rate_limit_concurrency
                 job.rate_limit_registry.acquire_and_enqueue(job.rate_limit_concurrency)
