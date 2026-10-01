@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
     from .worker.base import BaseWorker
 
-from .defaults import RQ_KEY_PREFIX, KEY_PREFIX
+from .defaults import KEY_PREFIX, RQ_KEY_PREFIX
 from .job import Job
 from .registry import BaseRegistry, StartedJobRegistry
 from .utils import as_text, current_timestamp, now, parse_composite_key
