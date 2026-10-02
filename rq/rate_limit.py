@@ -28,62 +28,65 @@ class RateLimit:
         self.concurrency = concurrency
 
 
-# Lua: if allowed_count < concurrency, pop the oldest rate_limited job (skipping stale
-# entries), add it to allowed, push it onto its queue (front if enqueue_at_front is set)
-# and mark it queued. Returns the enqueued job_id or nil.
+# Lua: fill free slots with waiting jobs, oldest first. Each is added to allowed, pushed onto
+# its queue (front if enqueue_at_front is set) and marked queued. Returns the promoted job ids.
 # Job and queue keys depend on the popped job, so they're built from the passed prefixes.
 # KEYS: allowed_key, rate_limited_key
 # ARGV: concurrency, timestamp, enqueued_at, queue_key_prefix, job_key_prefix
 ACQUIRE_AND_ENQUEUE_SCRIPT = """
-local allowed_count = redis.call('ZCARD', KEYS[1])
 local concurrency = tonumber(ARGV[1])
 local timestamp = tonumber(ARGV[2])
 local enqueued_at = ARGV[3]
 local queue_key_prefix = ARGV[4]
 local job_key_prefix = ARGV[5]
+local promoted = {}
 
-if allowed_count < concurrency then
-    while true do
-        local result = redis.call('ZPOPMIN', KEYS[2])
-        if #result == 0 then
-            return nil
+while redis.call('ZCARD', KEYS[1]) < concurrency do
+    local result = redis.call('ZPOPMIN', KEYS[2])
+    if #result == 0 then
+        break
+    end
+    local job_id = result[1]
+    local job_key = job_key_prefix .. job_id
+    local fields = redis.call('HMGET', job_key, 'origin', 'status', 'enqueue_at_front')
+    local origin, status, enqueue_at_front = fields[1], fields[2], fields[3]
+    -- Drop stale entries (missing hash, no origin or not rate_limited); ZPOPMIN removed them.
+    if origin and status == 'rate_limited' then
+        redis.call('ZADD', KEYS[1], timestamp, job_id)
+        if enqueue_at_front == '1' then
+            redis.call('LPUSH', queue_key_prefix .. origin, job_id)
+        else
+            redis.call('RPUSH', queue_key_prefix .. origin, job_id)
         end
-        local job_id = result[1]
-        local job_key = job_key_prefix .. job_id
-        local fields = redis.call('HMGET', job_key, 'origin', 'status', 'enqueue_at_front')
-        local origin, status, enqueue_at_front = fields[1], fields[2], fields[3]
-        if origin and status == 'rate_limited' then
-            redis.call('ZADD', KEYS[1], timestamp, job_id)
-            if enqueue_at_front == '1' then
-                redis.call('LPUSH', queue_key_prefix .. origin, job_id)
-            else
-                redis.call('RPUSH', queue_key_prefix .. origin, job_id)
-            end
-            redis.call('HSET', job_key, 'status', 'queued', 'enqueued_at', enqueued_at)
-            return job_id
-        end
-        -- stale rate_limited job (missing hash, no origin, or non-rate_limited status):
-        -- it's already popped, so loop to the next
+        redis.call('HSET', job_key, 'status', 'queued', 'enqueued_at', enqueued_at)
+        table.insert(promoted, job_id)
     end
 end
-return nil
+return promoted
 """
 
 # Release = remove the completed job from allowed (ARGV[6]) then run the acquire script.
 # ARGV: concurrency, timestamp, enqueued_at, queue_key_prefix, job_key_prefix, completed_job_id
 RELEASE_AND_ENQUEUE_SCRIPT = "redis.call('ZREM', KEYS[1], ARGV[6])\n" + ACQUIRE_AND_ENQUEUE_SCRIPT
 
-# Like RELEASE_AND_ENQUEUE_SCRIPT, but returns nil without releasing if the job is queued
-# or started, so a job that re-acquired its slot after cleanup read its status keeps it.
-# KEYS: allowed_key, rate_limited_key, job_key
+# Like RELEASE_AND_ENQUEUE_SCRIPT, but for callers that don't own the job's outcome (cleanup,
+# cancel and delete). If the job's status is queued or started, or it has a live (unexpired)
+# execution, e.g. it was canceled or deleted while its horse runs, its slot is not released.
+# If it holds no slot, nothing is promoted either. Both cases return an empty list.
+# KEYS: allowed_key, rate_limited_key, job_key, executions_key
 # ARGV: concurrency, timestamp, enqueued_at, queue_key_prefix, job_key_prefix, job_id
 RELEASE_STALE_AND_ENQUEUE_SCRIPT = (
     """
 local status = redis.call('HGET', KEYS[3], 'status')
 if status == 'queued' or status == 'started' then
-    return nil
+    return {}
 end
-redis.call('ZREM', KEYS[1], ARGV[6])
+if redis.call('ZCOUNT', KEYS[4], '(' .. ARGV[2], '+inf') > 0 then
+    return {}
+end
+if redis.call('ZREM', KEYS[1], ARGV[6]) == 0 then
+    return {}
+end
 """
     + ACQUIRE_AND_ENQUEUE_SCRIPT
 )
@@ -179,21 +182,23 @@ class RateLimitRegistry:
             timestamp = current_timestamp()
         pipeline.zadd(self.rate_limited_key, {job_id: timestamp})
 
-    def acquire_and_enqueue(self, concurrency: int, enqueued_at: datetime | None = None) -> str | None:
-        """Try to enqueue the next rate_limited job.
+    def acquire_and_enqueue(
+        self, concurrency: int, enqueued_at: datetime | None = None, pipeline: Pipeline | None = None
+    ) -> list[str]:
+        """Atomically fill free slots with waiting jobs, oldest first.
 
-        Atomically checks if there's capacity, and if so pops from rate_limited,
-        adds to allowed, reads the job's origin to determine the queue,
-        pushes to the queue, and sets the job status to queued.
+        Each promoted job is added to allowed, pushed onto its origin queue and marked queued.
 
         Args:
             concurrency: Maximum number of jobs allowed to be queued or executing simultaneously.
-            enqueued_at: The timestamp to record as the job's `enqueued_at`.
-                Defaults to the current time. Callers can pass this so they can
-                mirror the stored value onto the in-memory job without a re-read.
+            enqueued_at: Recorded as each promoted job's `enqueued_at`; defaults to now. Pass it
+                to mirror the stored value onto an in-memory job without a re-read.
+            pipeline: If given, the script is queued on it and runs when the pipeline executes,
+                so this returns [] and the promoted ids are in the pipeline's results. If the
+                pipeline is watching keys, call `multi()` first.
 
         Returns:
-            The enqueued job_id, or None if no capacity or no rate_limited jobs.
+            The promoted job ids, oldest first.
         """
         from .queue import Queue
 
@@ -209,22 +214,20 @@ class RateLimitRegistry:
                 Queue.redis_queue_namespace_prefix,
                 Job.redis_job_namespace_prefix,
             ],
+            client=pipeline,
         )
-        if result is not None:
-            return as_text(result)
-        return None
+        if pipeline is not None:
+            return []
+        return [as_text(promoted_id) for promoted_id in result]
 
-    def release_and_enqueue(self, job_id: str) -> str | None:
-        """Release capacity from a completed job and enqueue the next rate_limited job.
-
-        Atomically removes the job from allowed, then tries to enqueue the next
-        rate_limited job (same logic as acquire_and_enqueue).
+    def release_and_enqueue(self, job_id: str) -> list[str]:
+        """Atomically release a job's slot, then fill free slots like `acquire_and_enqueue`.
 
         Args:
-            job_id: The completed job's ID to remove from allowed.
+            job_id: The job whose slot to release.
 
         Returns:
-            The enqueued job_id, or None if no rate_limited jobs.
+            The promoted job ids, oldest first.
         """
         from .queue import Queue
 
@@ -240,22 +243,22 @@ class RateLimitRegistry:
                 job_id,
             ],
         )
-        if result is not None:
-            return as_text(result)
-        return None
+        return [as_text(promoted_id) for promoted_id in result]
 
-    def release_stale_and_enqueue(self, job_id: str) -> str | None:
-        """Release the job's slot unless it is queued or started, then enqueue the next
-        rate_limited job. The status check and release are atomic.
+    def release_stale_and_enqueue(self, job_id: str) -> list[str]:
+        """Atomically release a job's slot if it no longer needs it, then fill free slots like
+        `acquire_and_enqueue`. See RELEASE_STALE_AND_ENQUEUE_SCRIPT for the checks.
 
         Returns:
-            The enqueued job_id, or None.
+            The promoted job ids, oldest first.
         """
+        from .executions import ExecutionRegistry
         from .queue import Queue
 
         timestamp = current_timestamp()
+        executions_key = ExecutionRegistry(job_id, connection=self.connection).key
         result = self._release_stale_script(
-            keys=[self.allowed_key, self.rate_limited_key, Job.key_for(job_id)],
+            keys=[self.allowed_key, self.rate_limited_key, Job.key_for(job_id), executions_key],
             args=[
                 self.concurrency,
                 timestamp,
@@ -265,41 +268,39 @@ class RateLimitRegistry:
                 job_id,
             ],
         )
-        if result is not None:
-            return as_text(result)
-        return None
+        return [as_text(promoted_id) for promoted_id in result]
 
-    def cancel(self, job_id: str, pipeline: Pipeline | None = None) -> str | None:
-        """Remove a job from rate limit tracking and enqueue the next rate_limited job if needed.
+    def cancel(self, job_id: str, pipeline: Pipeline | None = None) -> list[str]:
+        """Remove a job from rate limit tracking and, if it held a slot, fill free slots
+        with waiting jobs.
+
+        Call after the job was canceled or deleted, so its status is no longer queued or started.
+        Without a pipeline, if the job has a live execution, its slot is not released.
 
         Args:
             job_id: The job ID to remove.
-            pipeline: If provided, only the ZREM (allowed + rate_limited) ops are buffered onto
-                the caller's transaction and no job is promoted — promotion is left to the
-                next release/acquire or maintenance cleanup, since the caller may still
-                discard the transaction. If None, removal runs immediately and, if the job
-                was allowed, the next rate_limited job is promoted.
+            pipeline: If given, both removals are queued on it even if the job has a live
+                execution, and nothing is promoted until a later release or cleanup.
 
         Returns:
-            The enqueued job_id, or None.
+            The promoted job ids; always [] with a pipeline.
         """
         if pipeline is not None:
             pipeline.zrem(self.allowed_key, job_id)
             pipeline.zrem(self.rate_limited_key, job_id)
-            return None
+            return []
 
-        was_allowed = self.connection.zrem(self.allowed_key, job_id)
         self.connection.zrem(self.rate_limited_key, job_id)
-        if was_allowed:
-            return self.acquire_and_enqueue(self.concurrency)
-        return None
+        return self.release_stale_and_enqueue(job_id)
 
     def _release_stale_allowed_jobs(self) -> None:
         """Free allowed slots whose job no longer exists or is not in a state
         that legitimately holds a slot (queued or started).
 
         Any other state — missing, terminal, scheduled or malformed — means the
-        slot leaked and should be freed so rate_limited jobs can proceed.
+        slot leaked and should be freed so rate_limited jobs can proceed. If the
+        job has a live execution (it was canceled or deleted while running), its
+        slot is not released.
         """
         allowed_statuses = (JobStatus.QUEUED, JobStatus.STARTED)
         job_ids = self.get_allowed_job_ids()
@@ -320,8 +321,8 @@ class RateLimitRegistry:
                 self.release_stale_and_enqueue(job_id)
 
     def cleanup(self) -> None:
-        """Free stale allowed slots, enqueue rate_limited jobs if there is available
-        capacity, then remove the registry if both allowed and rate_limited are empty.
+        """Free stale allowed slots, fill free slots with waiting jobs, then remove the
+        registry if both allowed and rate_limited are empty.
 
         Called during periodic maintenance to handle cases where jobs are stuck
         in rate_limited (e.g., worker crashed before releasing capacity) or where a
@@ -339,15 +340,15 @@ class RateLimitRegistry:
         )
 
 
-def release_slot(job: Job) -> str | None:
+def release_slot(job: Job) -> list[str]:
     """Release the job's slot unless its cached status is queued or started, and
-    promote the next rate_limited job.
+    promote waiting jobs.
 
     Call after the transaction setting the outcome commits, with the job's
     cached status matching that outcome.
 
-    Returns the promoted job's ID, or None if no job is promoted.
+    Returns the promoted job ids.
     """
     if not job.has_rate_limit or job.get_status(refresh=False) in (JobStatus.QUEUED, JobStatus.STARTED):
-        return None
+        return []
     return RateLimitRegistry.from_job(job).release_and_enqueue(job.id)

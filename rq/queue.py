@@ -1236,6 +1236,7 @@ class Queue:
             ValueError: If unique=True and job has dependencies
             ValueError: If the job is rate limited and its class or this queue's class overrides
                 the default key prefix
+            ValueError: If the job is rate limited and a pipeline is given
         """
         self._check_rate_limit_namespace(job)
         if unique and not job._id:
@@ -1246,6 +1247,10 @@ class Queue:
             raise ValueError('unique=True is not supported with rate-limited jobs')
         if job.has_rate_limit and not self._is_async:
             raise ValueError('rate_limit is not supported on synchronous queues (is_async=False)')
+        # Promotion would run inside the caller's pipeline, so a later save of the returned
+        # job on that pipeline would overwrite the promoted status.
+        if job.has_rate_limit and pipeline is not None:
+            raise ValueError('rate-limited jobs cannot be enqueued with a pipeline')
 
         job.origin = self.name
         job = self.setup_dependencies(job, pipeline=pipeline)
@@ -1273,17 +1278,14 @@ class Queue:
     def _enqueue_rate_limited_job(self, job: Job, pipeline: Pipeline | None = None, at_front: bool = False) -> Job:
         """Enqueue a job through the rate limit registry.
 
-        Saves the job to Redis and adds it to the rate_limited set atomically, then
-        attempts to acquire capacity and enqueue it. If no capacity is available,
-        the job stays in the rate_limited set with RATE_LIMITED status.
+        Saves the job as rate_limited and adds it to the waiting set atomically, then fills
+        free slots with waiting jobs, oldest first. Without a free slot, the job keeps waiting.
 
         Args:
             job (Job): The job to enqueue (must have rate_limit_key and rate_limit_concurrency set)
-            pipeline (Optional[Pipeline]): If provided, the caller owns the pipeline: this
-                method only appends its rate-limit ops and returns; the caller must execute
-                the pipeline and then call
-                RateLimitRegistry.acquire_and_enqueue(job.rate_limit_concurrency) itself.
-                If None, this method executes and runs acquire_and_enqueue.
+            pipeline (Optional[Pipeline]): If given, the job's writes and promotion are queued on it
+                and run when it executes. Don't save the job on it afterwards; that would overwrite
+                the promoted status.
             at_front (bool): Whether the job should be pushed to the front of its queue when
                 promoted. Persisted on the job so the (possibly later, cross-worker) promotion
                 can honor it.
@@ -1308,14 +1310,16 @@ class Queue:
         job.cleanup(ttl=job.ttl, pipeline=pipe)
         registry.add_to_rate_limited(job.id, pipe)
 
-        if pipeline is None:
-            pipe.execute()
-            enqueued_at = now()
-            enqueued_job_id = registry.acquire_and_enqueue(job.rate_limit_concurrency, enqueued_at=enqueued_at)
-            if enqueued_job_id == job.id:
-                job._status = JobStatus.QUEUED
-                job.enqueued_at = enqueued_at
+        if pipeline is not None:
+            registry.acquire_and_enqueue(job.rate_limit_concurrency, pipeline=pipe)
+            return job
 
+        pipe.execute()
+        enqueued_at = now()
+        promoted_job_ids = registry.acquire_and_enqueue(job.rate_limit_concurrency, enqueued_at=enqueued_at)
+        if job.id in promoted_job_ids:
+            job._status = JobStatus.QUEUED
+            job.enqueued_at = enqueued_at
         return job
 
     def _enqueue_job(
