@@ -171,7 +171,8 @@ class CronJob:
             cron_iter = croniter(self.cron, base_time.astimezone().replace(tzinfo=None))
             while True:
                 local_candidate = cron_iter.get_next(datetime)
-                candidate_utc = local_candidate.replace(fold=0).astimezone(timezone.utc)
+                # Convert via timestamp(): before Python 3.12, astimezone() inverts fold for skipped times
+                candidate_utc = datetime.fromtimestamp(local_candidate.replace(fold=0).timestamp(), timezone.utc)
                 if candidate_utc > base_time:
                     return candidate_utc
         elif self.interval and self.latest_enqueue_time:
