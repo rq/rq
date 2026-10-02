@@ -610,16 +610,11 @@ class ReadyJobRegistry(BaseRegistry):
                     pipe.multi()
                     self.remove(job, pipeline=pipe)
                     if job.has_rate_limit:
-                        # Route rate-limited dependents through the rate limit registry, not
-                        # straight onto the queue. Promotion deliberately runs after EXEC so
-                        # it observes committed state — buffer the ops, then acquire.
+                        # Rate-limited dependents wait for a slot instead of going straight onto the queue.
                         queue._enqueue_rate_limited_job(job, pipeline=pipe)
-                        pipe.execute()
-                        assert job.rate_limit_concurrency
-                        RateLimitRegistry.from_job(job).acquire_and_enqueue(job.rate_limit_concurrency)
                     else:
                         queue._enqueue_job(job, pipeline=pipe, at_front=job.should_enqueue_at_front())
-                        pipe.execute()
+                    pipe.execute()
             except WatchError:
                 logger.info('Ready job %s changed while enqueueing; skipping for now', job_id)
                 continue
