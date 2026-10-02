@@ -4,11 +4,13 @@ from unittest import mock
 from unittest.mock import ANY
 
 import pytest
+import redis
 
+from rq.connections import get_connection_kwargs
 from rq.defaults import DEFAULT_FAILURE_TTL
 from rq.exceptions import AbandonedJobError, InvalidJobOperation
 from rq.executions import Execution
-from rq.job import Dependency, Job, JobStatus, requeue_job
+from rq.job import Dependency, Job, JobStatus, Retry, requeue_job
 from rq.queue import Queue
 from rq.registry import (
     BaseRegistry,
@@ -22,9 +24,9 @@ from rq.registry import (
 )
 from rq.serializers import JSONSerializer
 from rq.utils import as_text, current_timestamp, now
-from rq.worker import Worker
+from rq.worker import SimpleWorker, Worker
 from tests import RQTestCase
-from tests.fixtures import div_by_zero, say_hello
+from tests.fixtures import div_by_zero, rpush, say_hello
 
 
 class CustomJob(Job):
@@ -960,6 +962,27 @@ class TestStartedJobRegistry(RQTestCase):
 
         self.assertFalse(job_not_to_be_executed.is_finished)
         self.assertNotIn(job_not_to_be_executed, finished_job_registry)
+
+    def test_a_finished_job_is_not_run_again_when_the_reply_is_lost(self):
+        """After handle_job_success commits FINISHED, a lost Redis reply must not
+        fail the job or trigger Retry (#2496)."""
+        key = 'due-work:runs'
+        job = self.queue.enqueue(rpush, key, 'ran', get_connection_kwargs(self.connection), retry=Retry(max=1))
+        handle_job_success = SimpleWorker.handle_job_success
+
+        def reply_lost(worker, *args, **kwargs):
+            # The success commits; then the connection drops before the worker reads the answer.
+            handle_job_success(worker, *args, **kwargs)
+            raise redis.exceptions.ConnectionError('Connection closed by server.')
+
+        with mock.patch.object(SimpleWorker, 'handle_job_success', reply_lost):
+            SimpleWorker([self.queue], connection=self.connection).work(burst=True)
+        SimpleWorker([self.queue], connection=self.connection).work(burst=True)
+
+        # The job ran once and stays finished.
+        self.assertEqual(self.connection.lrange(key, 0, -1), [b'ran'])
+        job.refresh()
+        self.assertEqual(job.get_status(), JobStatus.FINISHED)
 
     def test_warnings_on_add_remove_and_exception(self):
         """Test backwards compatibility of the .add and .remove methods for

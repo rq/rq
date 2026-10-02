@@ -1651,7 +1651,24 @@ class BaseWorker:
 
             self._finalize_success(job, queue, execution, return_value)
         except:  # NOQA
-            self._finalize_failure(job, queue, execution, sys.exc_info())
+            # handle_job_success commits FINISHED in a MULTI/EXEC. If the reply is
+            # lost (failover, proxy timeout, network blip), redis-py raises after
+            # Redis already applied the write. Treating that as failure would run
+            # on_failure and Retry, so a finished job runs again (#2496).
+            exc_info = sys.exc_info()
+            try:
+                already_finished = job.get_status(refresh=True) == JobStatus.FINISHED
+            except Exception:
+                already_finished = False
+            if already_finished:
+                self.log.warning(
+                    'Worker %s: job %s is already finished; ignoring error during finalization: %s',
+                    self.name,
+                    job.id,
+                    exc_info[1],
+                )
+                return True
+            self._finalize_failure(job, queue, execution, exc_info)
             return False
 
         return True
