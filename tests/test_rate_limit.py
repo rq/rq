@@ -5,13 +5,14 @@ from redis import WatchError
 from redis.client import Pipeline
 
 from rq.exceptions import InvalidJobOperation
-from rq.executions import Execution
+from rq.executions import Execution, ExecutionRegistry
 from rq.job import Job, JobStatus, Retry
 from rq.queue import Queue
 from rq.rate_limit import RateLimit, RateLimitRegistry, release_slot
 from rq.registry import ScheduledJobRegistry, StartedJobRegistry
 from rq.repeat import Repeat
 from rq.scheduler import RQScheduler
+from rq.utils import now
 from rq.worker import SimpleWorker
 from tests import RQTestCase
 from tests.fixtures import CustomJob, div_by_zero, returns_retry, returns_retry_with_delay, say_hello
@@ -223,15 +224,15 @@ class TestRateLimitRegistry(RQTestCase):
         self.assertIn(job2.id, self.rate_limit_registry.get_allowed_job_ids())
 
     def test_cancel_rate_limited_job(self):
-        """cancel removes a rate_limited job without affecting allowed set."""
+        """cancel removes a rate_limited job. It holds no slot, so nothing is promoted, even into a spare slot."""
         self.connection.zadd(self.rate_limit_registry.allowed_key, {'allowed1': 1})
         self._add_to_rate_limited('rate_limited1')
+        waiting_job = self._make_job(status=JobStatus.RATE_LIMITED)
+        self._add_to_rate_limited(waiting_job.id)
 
-        result = self.rate_limit_registry.cancel('rate_limited1')
+        self.rate_limit_registry.cancel('rate_limited1')
 
-        self.assertEqual(result, [])
-        self.assertIn('allowed1', self.rate_limit_registry.get_allowed_job_ids())
-        self.assertEqual(self.rate_limit_registry.get_rate_limited_job_count(), 0)
+        self.assertEqual(self.rate_limit_registry.get_rate_limited_job_ids(), [waiting_job.id])
 
     def test_cancel_nonexistent_job(self):
         """cancel is a no-op for jobs not in any set."""
@@ -811,6 +812,55 @@ class TestRateLimitEnqueue(RQTestCase):
         self.assertNotIn(job1.id, registry.get_allowed_job_ids())
         self.assertIn(job3.id, registry.get_allowed_job_ids())
         self.assertEqual(job3.get_status(), JobStatus.QUEUED)
+
+    def _start_rate_limited_job(self) -> tuple[SimpleWorker, Job, Execution, Job]:
+        """Start a job that holds the only slot, with a second job waiting for it.
+
+        Returns the worker, the horse's copy of the started job, its execution and the waiting job.
+        """
+        rate_limit = RateLimit(key='test', concurrency=1)
+        started_job = self.queue.enqueue(say_hello, rate_limit=rate_limit)
+        waiting_job = self.queue.enqueue(say_hello, rate_limit=rate_limit)
+        worker = SimpleWorker([self.queue], connection=self.connection)
+        execution = worker.prepare_execution(started_job)
+        worker.prepare_job_execution(started_job)
+        return worker, started_job, execution, waiting_job
+
+    def test_cancel_started_job_keeps_slot_until_finished(self) -> None:
+        """If a started job is canceled, it keeps its slot, even through cleanup, until its horse finishes."""
+        worker, started_job, execution, waiting_job = self._start_rate_limited_job()
+        registry = RateLimitRegistry(key='test', connection=self.connection)
+
+        Job.fetch(started_job.id, connection=self.connection).cancel()
+        registry.cleanup()
+        self.assertEqual(registry.get_allowed_job_ids(), [started_job.id])
+
+        started_job.ended_at = now()
+        worker.handle_job_success(started_job, self.queue, StartedJobRegistry(connection=self.connection), execution)
+        self.assertEqual(registry.get_allowed_job_ids(), [waiting_job.id])
+
+    def test_delete_started_job_keeps_slot_until_finished(self) -> None:
+        """If a started job is deleted, it keeps its slot, even through cleanup, until its horse finishes."""
+        worker, started_job, execution, waiting_job = self._start_rate_limited_job()
+        registry = RateLimitRegistry(key='test', connection=self.connection)
+
+        Job.fetch(started_job.id, connection=self.connection).delete()
+        registry.cleanup()
+        self.assertEqual(registry.get_allowed_job_ids(), [started_job.id])
+
+        started_job.ended_at = now()
+        worker.handle_job_success(started_job, self.queue, StartedJobRegistry(connection=self.connection), execution)
+        self.assertEqual(registry.get_allowed_job_ids(), [waiting_job.id])
+
+    def test_cancel_started_job_frees_slot_after_execution_expires(self) -> None:
+        """If a canceled job's execution expires (e.g. its worker died), cleanup frees its slot."""
+        _, started_job, execution, waiting_job = self._start_rate_limited_job()
+        registry = RateLimitRegistry(key='test', connection=self.connection)
+
+        Job.fetch(started_job.id, connection=self.connection).cancel()
+        self.connection.zadd(ExecutionRegistry(started_job.id, connection=self.connection).key, {execution.id: 1})
+        registry.cleanup()
+        self.assertEqual(registry.get_allowed_job_ids(), [waiting_job.id])
 
     def test_cancel_with_pipeline_is_disallowed(self):
         """Canceling a rate-limited job with a caller-owned pipeline is forbidden: promotion

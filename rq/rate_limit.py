@@ -69,9 +69,11 @@ return promoted
 # ARGV: concurrency, timestamp, enqueued_at, queue_key_prefix, job_key_prefix, completed_job_id
 RELEASE_AND_ENQUEUE_SCRIPT = "redis.call('ZREM', KEYS[1], ARGV[6])\n" + ACQUIRE_AND_ENQUEUE_SCRIPT
 
-# Like RELEASE_AND_ENQUEUE_SCRIPT, but skips the release and returns an empty list if the job
-# is queued or started, so a job that re-acquired its slot after cleanup read its status keeps it.
-# KEYS: allowed_key, rate_limited_key, job_key
+# Like RELEASE_AND_ENQUEUE_SCRIPT, but for callers that don't own the job's outcome (cleanup,
+# cancel and delete). If the job's status is queued or started, or it has a live (unexpired)
+# execution, e.g. it was canceled or deleted while its horse runs, its slot is not released.
+# If it holds no slot, nothing is promoted either. Both cases return an empty list.
+# KEYS: allowed_key, rate_limited_key, job_key, executions_key
 # ARGV: concurrency, timestamp, enqueued_at, queue_key_prefix, job_key_prefix, job_id
 RELEASE_STALE_AND_ENQUEUE_SCRIPT = (
     """
@@ -79,7 +81,12 @@ local status = redis.call('HGET', KEYS[3], 'status')
 if status == 'queued' or status == 'started' then
     return {}
 end
-redis.call('ZREM', KEYS[1], ARGV[6])
+if redis.call('ZCOUNT', KEYS[4], '(' .. ARGV[2], '+inf') > 0 then
+    return {}
+end
+if redis.call('ZREM', KEYS[1], ARGV[6]) == 0 then
+    return {}
+end
 """
     + ACQUIRE_AND_ENQUEUE_SCRIPT
 )
@@ -239,17 +246,19 @@ class RateLimitRegistry:
         return [as_text(promoted_id) for promoted_id in result]
 
     def release_stale_and_enqueue(self, job_id: str) -> list[str]:
-        """Atomically release a job's slot unless it is queued or started, then fill free
-        slots like `acquire_and_enqueue`.
+        """Atomically release a job's slot if it no longer needs it, then fill free slots like
+        `acquire_and_enqueue`. See RELEASE_STALE_AND_ENQUEUE_SCRIPT for the checks.
 
         Returns:
             The promoted job ids, oldest first.
         """
+        from .executions import ExecutionRegistry
         from .queue import Queue
 
         timestamp = current_timestamp()
+        executions_key = ExecutionRegistry(job_id, connection=self.connection).key
         result = self._release_stale_script(
-            keys=[self.allowed_key, self.rate_limited_key, Job.key_for(job_id)],
+            keys=[self.allowed_key, self.rate_limited_key, Job.key_for(job_id), executions_key],
             args=[
                 self.concurrency,
                 timestamp,
@@ -265,10 +274,13 @@ class RateLimitRegistry:
         """Remove a job from rate limit tracking and, if it held a slot, fill free slots
         with waiting jobs.
 
+        Call after the job was canceled or deleted, so its status is no longer queued or started.
+        Without a pipeline, if the job has a live execution, its slot is not released.
+
         Args:
             job_id: The job ID to remove.
-            pipeline: If given, only the removals are queued on it; promotion waits for a later
-                release or cleanup.
+            pipeline: If given, both removals are queued on it even if the job has a live
+                execution, and nothing is promoted until a later release or cleanup.
 
         Returns:
             The promoted job ids; always [] with a pipeline.
@@ -278,18 +290,17 @@ class RateLimitRegistry:
             pipeline.zrem(self.rate_limited_key, job_id)
             return []
 
-        was_allowed = self.connection.zrem(self.allowed_key, job_id)
         self.connection.zrem(self.rate_limited_key, job_id)
-        if was_allowed:
-            return self.acquire_and_enqueue(self.concurrency)
-        return []
+        return self.release_stale_and_enqueue(job_id)
 
     def _release_stale_allowed_jobs(self) -> None:
         """Free allowed slots whose job no longer exists or is not in a state
         that legitimately holds a slot (queued or started).
 
         Any other state — missing, terminal, scheduled or malformed — means the
-        slot leaked and should be freed so rate_limited jobs can proceed.
+        slot leaked and should be freed so rate_limited jobs can proceed. If the
+        job has a live execution (it was canceled or deleted while running), its
+        slot is not released.
         """
         allowed_statuses = (JobStatus.QUEUED, JobStatus.STARTED)
         job_ids = self.get_allowed_job_ids()
