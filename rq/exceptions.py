@@ -1,36 +1,45 @@
 class NoSuchJobError(Exception):
-    pass
+    """Raised when a job cannot be found in Redis, e.g. by ``Job.fetch()`` for an unknown or expired job ID."""
 
 
 class NoSuchGroupError(Exception):
-    pass
+    """Raised by ``Group.fetch()`` when no group with the given name exists in Redis."""
 
 
 class DeserializationError(Exception):
-    pass
+    """Raised when a job's stored data (function, args and kwargs) cannot be loaded by its serializer."""
 
 
 class InvalidJobDependency(Exception):
-    pass
+    """Not currently raised by RQ."""
 
 
 class DuplicateJobError(Exception):
-    pass
+    """Raised when enqueueing a job whose ID already exists in Redis."""
 
 
 class InvalidJobOperationError(Exception):
-    pass
+    """Not currently raised by RQ; see :class:`InvalidJobOperation`."""
 
 
 class InvalidJobOperation(Exception):
-    pass
+    """Raised when an operation does not apply to the job's current state.
+
+    For example, requeueing a job that is no longer in the registry, or sending a
+    stop command for a job that is not currently executing.
+    """
 
 
 class DequeueTimeout(Exception):
-    pass
+    """Raised when a blocking dequeue times out before any job arrives on the queues."""
 
 
 class ShutDownImminentException(BaseException):
+    """Raised in the work horse to cancel the running job before a forced stop.
+
+    ``extra_info`` holds details of the interrupted stack frame.
+    """
+
     # Inherit from BaseException as this is used specifically as a
     # 'shutdown' signal and should not be caught by except Exception.
     def __init__(self, msg, extra_info):
@@ -39,20 +48,24 @@ class ShutDownImminentException(BaseException):
 
 
 class TimeoutFormatError(Exception):
-    pass
+    """Raised when a timeout is neither an integer nor a string such as ``"1h"`` or ``"23m"``."""
 
 
 class AbandonedJobError(Exception):
-    pass
+    """Passed to failure callbacks and exception handlers when a job was left in the
+    started state because its worker died while running it.
+    """
 
 
 class SchedulerNotFound(Exception):
-    pass
+    """Raised when no scheduler with the given name is registered."""
 
 
 class DuplicateSchedulerError(Exception):
-    pass
+    """Raised when registering a cron scheduler whose name is already registered."""
 
 
 class StopRequested(Exception):
-    pass
+    """Raised inside a worker to stop its work loop, e.g. after a stop signal or
+    when the worker is suspended in burst mode.
+    """
