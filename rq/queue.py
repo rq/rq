@@ -881,7 +881,7 @@ class Queue:
         to represent the delayed function calls and enqueues them.
 
         Args:
-            job_datas (List['EnqueueData']): A List of job data
+            job_datas (Iterable[EnqueueData]): An iterable of job data
             pipeline (Optional[Pipeline], optional): The Redis Pipeline. Defaults to None.
 
         Returns:
@@ -919,8 +919,16 @@ class Queue:
                 'repeat': job_data.repeat,
             }
 
+        # Partition in one pass so that job_datas can be a one-shot iterable.
+        job_datas_without_dependencies = []
+        job_datas_with_dependencies = []
+        for job_data in job_datas:
+            if job_data.depends_on:
+                job_datas_with_dependencies.append(job_data)
+            else:
+                job_datas_without_dependencies.append(job_data)
+
         # Enqueue jobs without dependencies
-        job_datas_without_dependencies = [job_data for job_data in job_datas if not job_data.depends_on]
         if job_datas_without_dependencies:
             jobs_without_dependencies = [
                 self._enqueue_job(
@@ -933,7 +941,6 @@ class Queue:
             if pipeline is None:
                 pipe.execute()
 
-        job_datas_with_dependencies = [job_data for job_data in job_datas if job_data.depends_on]
         if job_datas_with_dependencies:
             # Save all jobs with dependencies as deferred
             jobs_with_dependencies = [
