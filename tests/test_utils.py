@@ -171,6 +171,14 @@ class TestUtils(RQTestCase):
         self.assertRaises(ValueError, import_attribute, 'non.existent.module')
         self.assertRaises(ValueError, import_attribute, 'rq.worker.WrongWorker')
 
+    def test_import_attribute_preserves_internal_import_error(self):
+        with patch(
+            'rq.utils.importlib.import_module',
+            side_effect=ImportError('dependency import failed'),
+        ):
+            with self.assertRaisesRegex(ImportError, 'dependency import failed'):
+                import_attribute('rq.worker.SimpleWorker')
+
     def test_ceildiv_even(self):
         """When a number is evenly divisible by another ceildiv returns the quotient"""
         dividend = 12
