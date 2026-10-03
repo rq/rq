@@ -27,6 +27,7 @@ Bug Fixes:
 * `enqueue_at()` and `enqueue_in()` now honor `unique=True`. Thanks @jamalkamaladdin!
 * Job repeats are now scheduled against UTC instead of the local wall clock. Thanks @dylanpulver!
 * `StartedJobRegistry.cleanup()` no longer marks finished jobs as abandoned. Thanks @gyanu2507!
+* A worker whose execution was reclaimed by `StartedJobRegistry.cleanup()` no longer finishes, fails or retries the job that another worker has since taken. `handle_job_success()` now returns `False` in that case. Thanks @gyanu2507!
 * `StartedJobRegistry.cleanup()` now sends `failed` webhooks for abandoned jobs and no longer aborts when a failure callback raises. Thanks @selwin!
 * Event loops are now closed after coroutine jobs finish. Thanks @Kuang-xianxin!
 
