@@ -779,9 +779,10 @@ class BaseWorker:
                 # so an exception there can't skip them. send_webhooks never raises.
                 if not retry and not job_is_stopped:
                     job.send_webhooks(JobStatus.FAILED, exc_string=exc_string)
+                # Release before enqueue_dependents so an exception there can't leak the slot.
+                release_slot(job)
                 if should_enqueue_dependents:
                     queue.enqueue_dependents(job)
-                release_slot(job)
             except Exception as e:
                 # Log instead of raising if Redis is down or enqueueing dependents fails.
                 self.log.error(
@@ -1430,8 +1431,9 @@ class BaseWorker:
                     # Send webhooks before enqueue_dependents so an exception there can't skip them.
                     # No exception was raised, so exc_string is empty.
                     job.send_webhooks(JobStatus.FAILED, exc_string='')
-                    queue.enqueue_dependents(job)
+                    # Release before enqueue_dependents so an exception there can't leak the slot.
                     release_slot(job)
+                    queue.enqueue_dependents(job)
                 except Exception as e:
                     self.log.error(
                         'Worker %s: exception during pipeline execute or enqueue_dependents for job %s: %s',
