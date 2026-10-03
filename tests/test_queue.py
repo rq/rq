@@ -648,7 +648,7 @@ class TestQueue(RQTestCase):
             job_1_data = Queue.prepare_data(say_hello, job_id='fake_job_id_1', at_front=False)
             job_2_data = Queue.prepare_data(say_hello, job_id='fake_job_id_2', at_front=False)
             job_3_data = Queue.prepare_data(say_hello, job_id='fake_job_id_3', at_front=True)
-            jobs = q.enqueue_many([job_1_data, job_2_data, job_3_data], pipeline=pipe)
+            jobs = q.enqueue_many((job_data for job_data in [job_1_data, job_2_data, job_3_data]), pipeline=pipe)
             self.assertEqual(q.job_ids, [])
             for job in jobs:
                 self.assertEqual(job.get_status(refresh=False), JobStatus.QUEUED)
@@ -656,6 +656,66 @@ class TestQueue(RQTestCase):
             # Only in registry after execute, since passed in pipeline
             self.assertEqual(len(q), 3)
             self.assertEqual(q.job_ids, ['fake_job_id_3', 'fake_job_id_1', 'fake_job_id_2'])
+
+    def test_enqueue_many_iterables(self):
+        """One-shot iterables retain jobs with and without dependencies."""
+        for iterable_type in (list, tuple, iter):
+            for statuses in (
+                (),
+                ('queued', 'queued'),
+                ('deferred', 'deferred'),
+                ('ready', 'deferred', 'queued', 'ready', 'queued', 'deferred'),
+            ):
+                with self.subTest(iterable_type=iterable_type.__name__, statuses=statuses):
+                    self.connection.flushdb()
+                    q = Queue(connection=self.connection)
+                    pending = Job.create(say_hello, connection=self.connection, status=JobStatus.QUEUED)
+                    pending.save()
+                    finished = Job.create(say_hello, connection=self.connection, status=JobStatus.FINISHED)
+                    finished.save()
+                    dependencies = {'queued': None, 'deferred': pending, 'ready': finished}
+                    job_datas = [
+                        Queue.prepare_data(say_hello, depends_on=dependencies[status], job_id=f'{status}-{index}')
+                        for index, status in enumerate(statuses)
+                    ]
+                    jobs = q.enqueue_many(iterable_type(job_data for job_data in job_datas))
+
+                    expected_ids = [
+                        job_data.job_id
+                        for status in ('queued', 'deferred', 'ready')
+                        for input_status, job_data in zip(statuses, job_datas)
+                        if input_status == status
+                    ]
+                    self.assertEqual([job.id for job in jobs], expected_ids)
+                    expected_statuses = [JobStatus.QUEUED] * statuses.count('queued')
+                    expected_statuses += [JobStatus.DEFERRED] * statuses.count('deferred')
+                    expected_statuses += [JobStatus.QUEUED] * statuses.count('ready')
+                    self.assertEqual([job.get_status() for job in jobs], expected_statuses)
+                    self.assertEqual(
+                        q.job_ids,
+                        [job.id for job, status in zip(jobs, expected_statuses) if status == JobStatus.QUEUED],
+                    )
+                    self.assertCountEqual(
+                        q.deferred_job_registry.get_job_ids(),
+                        [job.id for job, status in zip(jobs, expected_statuses) if status == JobStatus.DEFERRED],
+                    )
+
+    def test_enqueue_many_generator_with_passed_pipeline(self):
+        """Generator batches retain dependent jobs when the caller supplies a pipeline."""
+        q = Queue(connection=self.connection)
+        parent = q.enqueue(say_hello)
+        job_datas = [
+            Queue.prepare_data(say_hello, job_id='dependent', depends_on=parent),
+            Queue.prepare_data(say_hello, job_id='independent'),
+        ]
+        with self.connection.pipeline() as pipe:
+            jobs = q.enqueue_many((job_data for job_data in job_datas), pipeline=pipe)
+            self.assertEqual([job.id for job in jobs], ['independent', 'dependent'])
+            pipe.execute()
+
+        self.assertEqual(q.job_ids, [parent.id, 'independent'])
+        self.assertEqual(Job.fetch('dependent', connection=self.connection).get_status(), JobStatus.DEFERRED)
+        self.assertEqual(q.deferred_job_registry.get_job_ids(), ['dependent'])
 
     def test_enqueue_different_queues_with_passed_pipeline(self):
         """Jobs should be enqueued into different queues in a provided pipeline"""
