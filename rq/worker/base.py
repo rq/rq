@@ -727,6 +727,12 @@ class BaseWorker:
         its dependents. Frees its rate limit slot unless the job was requeued.
         """
         self.log.debug('Worker %s: handling failed execution of job %s', self.name, job.id)
+        if execution is not None:
+            registry = started_job_registry if started_job_registry is not None else job.started_job_registry
+            if self._execution_was_reclaimed(self.connection, registry, job, execution):
+                # Failing or retrying the job now would overlap whoever runs it next.
+                self._discard_reclaimed_execution(job, execution)
+                return
         with self.connection.pipeline() as pipeline:
             if started_job_registry is None:
                 started_job_registry = StartedJobRegistry(
@@ -1466,18 +1472,24 @@ class BaseWorker:
         queue: Queue,
         started_job_registry: StartedJobRegistry,
         execution: Execution,
-    ):
+    ) -> bool:
         """Handles the successful execution of a job.
 
         Saves the result unless `result_ttl` is 0, schedules the next repeat if any, enqueues
         ready dependents and frees the rate limit slot unless the job was requeued. The
         transaction is retried on `WatchError` when the job's dependents change.
 
+        If `StartedJobRegistry.cleanup` has already reclaimed this execution (its lease
+        expired), the job belongs to whoever runs it next, so it is left untouched.
+
         Args:
             job (Job): The job that was successful.
             queue (Queue): The queue
             started_job_registry (StartedJobRegistry): The started registry
             execution (Execution): The execution that ran the job.
+
+        Returns:
+            bool: False if the execution had been reclaimed and the job was not settled.
         """
         self.log.debug('Worker %s: handling successful execution of job %s', self.name, job.id)
 
@@ -1485,8 +1497,13 @@ class BaseWorker:
             while True:
                 try:
                     # execute() raises WatchError if a dependent is added after
-                    # move_dependents_to_ready reads them; the loop then retries.
-                    pipeline.watch(job.dependents_key)
+                    # move_dependents_to_ready reads them, or if the job is reclaimed
+                    # or restarted after the check below; the loop then retries.
+                    pipeline.watch(job.dependents_key, job.key)
+                    if self._execution_was_reclaimed(pipeline, started_job_registry, job, execution):
+                        pipeline.reset()
+                        self._discard_reclaimed_execution(job, execution)
+                        return False
                     self.log.debug('Worker %s: moving dependents of job %s to ready', self.name, job.id)
                     dependent_job_ids_by_queue = queue.move_dependents_to_ready(job, pipeline=pipeline)
 
@@ -1548,9 +1565,32 @@ class BaseWorker:
                         )
 
                     self.log.debug('Worker %s: finished handling successful execution of job %s', self.name, job.id)
-                    break
+                    return True
                 except redis.exceptions.WatchError:
                     continue
+
+    @staticmethod
+    def _execution_was_reclaimed(
+        connection: Redis | Pipeline, registry: StartedJobRegistry, job: Job, execution: Execution
+    ) -> bool:
+        """True if StartedJobRegistry.cleanup handed the job on after this execution's lease expired."""
+        if connection.zscore(registry.key, execution.composite_key) is not None:
+            return False
+        # cancel(), stop and delete() also drop the entry, but leave the job to this execution.
+        status = connection.hget(job.key, 'status')
+        return status is not None and as_text(status) not in (JobStatus.CANCELED, JobStatus.STOPPED)
+
+    def _discard_reclaimed_execution(self, job: Job, execution: Execution) -> None:
+        """Drops this worker's record of an execution that cleanup has already reclaimed."""
+        self.log.warning(
+            'Worker %s: execution %s of job %s was reclaimed after its lease expired; not settling the job',
+            self.name,
+            execution.id,
+            job.id,
+        )
+        with self.connection.pipeline() as pipeline:
+            self.cleanup_execution(job, pipeline=pipeline, execution=execution)
+            pipeline.execute()
 
     def handle_execution_ended(self, job: Job, queue: Queue, heartbeat_ttl: int):
         """Called after job has finished execution."""
@@ -1577,9 +1617,11 @@ class BaseWorker:
 
         job._status = JobStatus.FINISHED
         execute_success_callback(job, self.death_penalty_class, return_value)
-        self.handle_job_success(
+        settled = self.handle_job_success(
             job=job, queue=queue, started_job_registry=queue.started_job_registry, execution=execution
         )
+        if settled is False:
+            return
         job.send_webhooks(JobStatus.FINISHED)
 
         self.log.info('Worker %s: %s: %s (%s)', self.name, green(job.origin), blue('Job OK'), job.id)
