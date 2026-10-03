@@ -8,6 +8,7 @@ New Features:
 
 Breaking Changes:
 * RQ now requires `redis-py` >= 5.0.1. Thanks @selwin!
+* `CronScheduler` now evaluates cron strings in local timezone instead of UTC. Thanks @selwin!
 * Dependent jobs now pass through a new `READY_TO_ENQUEUE` status and `ReadyJobRegistry` before being enqueued. Thanks @selwin!
 * `Queue.enqueue_dependents()` no longer accepts `pipeline`; use `Queue.move_dependents_to_ready()` followed by `Queue.enqueue_ready_jobs_by_queue()` instead. Thanks @selwin!
 * `job.cancel(enqueue_dependents=True, pipeline=pipeline)` requires a watched pipeline and no longer enqueues dependents; pass its return value to `Queue.enqueue_ready_jobs_by_queue()` after executing the pipeline. Thanks @selwin!
@@ -20,6 +21,7 @@ Breaking Changes:
 * `Job.perform()` no longer removes the job key's TTL. Job key TTL changes are now handled by workers. Thanks @selwin!
 * `get_current_job()` now uses `contextvars` instead of thread-locals; gevent-based custom workers need `greenlet` >= 0.4.17. Thanks @selwin!
 * RQ now disables propagation on loggers it configures itself to prevent double logging when applications configure logging afterwards. Thanks @selwin!
+
 
 Bug Fixes:
 * `enqueue_at()` and `enqueue_in()` now honor `unique=True`. Thanks @jamalkamaladdin!

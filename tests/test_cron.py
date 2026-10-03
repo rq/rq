@@ -18,7 +18,7 @@ from rq.cron_scheduler_registry import get_keys, get_registry_key
 from rq.defaults import DEFAULT_CRON_SCHEDULER_TTL
 from rq.exceptions import SchedulerNotFound
 from rq.webhook import Webhook
-from tests import RQTestCase
+from tests import RQTestCase, system_timezone
 from tests.fixtures import div_by_zero, do_nothing, say_hello
 
 
@@ -406,13 +406,14 @@ class TestCronScheduler(RQTestCase):
         self.assertIsNone(job2.latest_enqueue_time)
         self.assertIsNotNone(job2.next_enqueue_time)
 
+    @system_timezone('UTC')
     @patch('rq.cron.now')
     def test_cron_jobs_run_when_scheduled_time_arrives(self, mock_now):
         """Test that cron jobs run when their scheduled time arrives"""
         scheduler = CronScheduler(connection=self.connection)
 
         # Set current time to 8:59 AM (1 minute before 9 AM)
-        current_time = datetime(2023, 10, 27, 8, 59, 0)
+        current_time = datetime(2023, 10, 27, 8, 59, 0, tzinfo=timezone.utc)
         mock_now.return_value = current_time
 
         # Register job scheduled for 9 AM daily
@@ -429,7 +430,7 @@ class TestCronScheduler(RQTestCase):
         self.assertIsNotNone(job.next_enqueue_time)
 
         # Now advance time to exactly 9 AM
-        scheduled_time = datetime(2023, 10, 27, 9, 0, 0)
+        scheduled_time = datetime(2023, 10, 27, 9, 0, 0, tzinfo=timezone.utc)
         mock_now.return_value = scheduled_time
 
         # Now the job should run
@@ -446,20 +447,21 @@ class TestCronScheduler(RQTestCase):
         self.assertEqual(job.latest_enqueue_time, scheduled_time)
         self.assertIsNotNone(job.next_enqueue_time)
         # Next run should be tomorrow at 9 AM
-        expected_next_run = datetime(2023, 10, 28, 9, 0, 0)
+        expected_next_run = datetime(2023, 10, 28, 9, 0, 0, tzinfo=timezone.utc)
         self.assertEqual(job.next_enqueue_time, expected_next_run)
 
         # Verify the actual queued job has correct function
         queued_job = queue.get_jobs()[0]
         self.assertEqual(queued_job.func_name, 'tests.fixtures.say_hello')
 
+    @system_timezone('UTC')
     @patch('rq.cron.now')
     def test_multiple_cron_jobs_selective_execution(self, mock_now):
         """Test that only cron jobs whose time has arrived are executed"""
         scheduler = CronScheduler(connection=self.connection)
 
         # Set current time to 8:15 AM
-        mock_now.return_value = datetime(2023, 10, 27, 8, 15, 0)
+        mock_now.return_value = datetime(2023, 10, 27, 8, 15, 0, tzinfo=timezone.utc)
 
         # Register multiple jobs with different schedules
         job_9am = scheduler.register(
@@ -483,14 +485,14 @@ class TestCronScheduler(RQTestCase):
 
         # At 8:30 AM, only the 30-minute job should be ready
         # (assuming it last ran at 8:00 AM or this is its first run at 8:30)
-        mock_now.return_value = datetime(2023, 10, 27, 8, 30, 0)
+        mock_now.return_value = datetime(2023, 10, 27, 8, 30, 0, tzinfo=timezone.utc)
         enqueued_jobs = scheduler.enqueue_jobs()
 
         # Only the 30-minute job should run (as it matches the current time)
         self.assertEqual(enqueued_jobs, [job_every_30_min])
 
         # Now advance to 9:00 AM
-        mock_now.return_value = datetime(2023, 10, 27, 9, 0, 0)
+        mock_now.return_value = datetime(2023, 10, 27, 9, 0, 0, tzinfo=timezone.utc)
         enqueued_jobs = scheduler.enqueue_jobs()
 
         # Now the 9 AM job should also run, but not the 10 AM job
@@ -499,12 +501,13 @@ class TestCronScheduler(RQTestCase):
         self.assertIn(job_9am, enqueued_jobs)
         self.assertNotIn(job_10am, enqueued_jobs)
 
+    @system_timezone('UTC')
     @patch('rq.cron.now')
     def test_calculate_sleep_interval_with_cron_jobs(self, mock_now):
         """Test calculate_sleep_interval with cron-scheduled jobs"""
         scheduler = CronScheduler(connection=self.connection)
         # Set current time to 8:58 AM
-        mock_now.return_value = datetime(2023, 10, 27, 8, 58, 0)
+        mock_now.return_value = datetime(2023, 10, 27, 8, 58, 0, tzinfo=timezone.utc)
 
         # Create jobs that will have next_enqueue_time set based on the mock time
         # Job 1: scheduled for every minute (next run at 8:59 AM, 1 minute away)
@@ -520,7 +523,7 @@ class TestCronScheduler(RQTestCase):
         self.assertEqual(actual_interval, 60.0)
 
         # Test with a closer time - 30 seconds before next job
-        mock_now.return_value = datetime(2023, 10, 27, 8, 58, 30)
+        mock_now.return_value = datetime(2023, 10, 27, 8, 58, 30, tzinfo=timezone.utc)
 
         actual_interval = scheduler.calculate_sleep_interval()
         # Should sleep for 30 seconds (not capped at 60)
