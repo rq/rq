@@ -1,14 +1,28 @@
 import time
+import unittest
 from unittest.mock import patch
 
 from rq import Queue, SimpleWorker
 from rq.registry import FailedJobRegistry, FinishedJobRegistry
 from rq.timeouts import (
+    JobTimeoutException,
     TimerDeathPenalty,
     UnixSignalDeathPenalty,
     get_default_death_penalty_class,
 )
 from tests import RQTestCase
+
+
+class TestTimeoutExceptionHierarchy(unittest.TestCase):
+    def test_job_timeout_is_not_caught_by_application_exception_handlers(self):
+        def application_job():
+            try:
+                raise JobTimeoutException('timeout')
+            except Exception:
+                return 'timeout was swallowed'
+
+        with self.assertRaises(JobTimeoutException):
+            application_job()
 
 
 class TimerBasedWorker(SimpleWorker):
