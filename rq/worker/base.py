@@ -1548,32 +1548,49 @@ class BaseWorker:
                     self.cleanup_execution(job, pipeline=pipeline, execution=execution)
 
                     pipeline.execute()
-
-                    # Drain ready dependents onto their origin queues now that the
-                    # deferred→ready transition has committed. Per-queue failures are
-                    # logged and left for ReadyJobRegistry.cleanup() to recover.
-                    queue.enqueue_ready_jobs_by_queue(dependent_job_ids_by_queue)
-
-                    if job.has_rate_limit:
-                        job.rate_limit_registry.release_and_enqueue(job.id)
-
-                    assert job.started_at
-                    assert job.ended_at
-                    time_taken = job.ended_at - job.started_at
-
-                    if self.log_job_description:
-                        self.log.info(
-                            'Successfully completed %s job in %ss on worker %s', job.description, time_taken, self.name
-                        )
-                    else:
-                        self.log.info(
-                            'Successfully completed job %s in %ss on worker %s', job.id, time_taken, self.name
-                        )
-
-                    self.log.debug('Worker %s: finished handling successful execution of job %s', self.name, job.id)
                     break
                 except redis.exceptions.WatchError:
+                    # redis-py also raises WatchError when the connection drops while
+                    # keys are watched, including after Redis applied the EXEC.
+                    pipeline.reset()
+                    if self._execution_has_settled(self.connection, started_job_registry, job, execution):
+                        self.log.warning(
+                            'Worker %s: success of job %s was already recorded; not replaying it', self.name, job.id
+                        )
+                        break
                     continue
+
+        # Drain ready dependents onto their origin queues now that the
+        # deferred→ready transition has committed. Per-queue failures are
+        # logged and left for ReadyJobRegistry.cleanup() to recover.
+        queue.enqueue_ready_jobs_by_queue(dependent_job_ids_by_queue)
+
+        if job.has_rate_limit:
+            job.rate_limit_registry.release_and_enqueue(job.id)
+
+        assert job.started_at
+        assert job.ended_at
+        time_taken = job.ended_at - job.started_at
+
+        if self.log_job_description:
+            self.log.info('Successfully completed %s job in %ss on worker %s', job.description, time_taken, self.name)
+        else:
+            self.log.info('Successfully completed job %s in %ss on worker %s', job.id, time_taken, self.name)
+
+        self.log.debug('Worker %s: finished handling successful execution of job %s', self.name, job.id)
+
+    @staticmethod
+    def _execution_has_settled(connection: Redis, registry: StartedJobRegistry, job: Job, execution: Execution) -> bool:
+        """Whether this execution no longer owns the job.
+
+        The success transaction removes the execution from the started registry, and
+        with result_ttl=0 it deletes the job hash too. A canceled or stopped job also
+        loses its registry entry, but it still has to go through failure handling.
+        """
+        if connection.zscore(registry.key, execution.composite_key) is not None:
+            return False
+        status = connection.hget(job.key, 'status')
+        return status is None or as_text(status) not in (JobStatus.CANCELED, JobStatus.STOPPED)
 
     def handle_execution_ended(self, job: Job, queue: Queue, heartbeat_ttl: int):
         """Called after job has finished execution."""
@@ -1674,18 +1691,26 @@ class BaseWorker:
 
             self._finalize_success(job, queue, execution, return_value)
         except:  # NOQA
-            # handle_job_success commits FINISHED in a MULTI/EXEC. If the reply is
-            # lost (failover, proxy timeout, network blip), redis-py raises after
-            # Redis already applied the write. Treating that as failure would run
+            # handle_job_success commits in a MULTI/EXEC. If the reply is lost
+            # (failover, proxy timeout, network blip), redis-py raises after Redis
+            # already applied the write. Treating that as failure would run
             # on_failure and Retry, so a finished job runs again (#2496).
             exc_info = sys.exc_info()
             try:
-                already_finished = job.get_status(refresh=True) == JobStatus.FINISHED
+                settled = self._execution_has_settled(self.connection, queue.started_job_registry, job, execution)
             except Exception:
-                already_finished = False
-            if already_finished:
+                # The outcome is unknown. Leave the execution in the started registry:
+                # if it is still there once its heartbeat expires, cleanup fails it as
+                # abandoned, and if the success did commit, nothing is left to clean up.
+                self.log.exception(
+                    'Worker %s: could not tell whether job %s settled; leaving it to registry cleanup',
+                    self.name,
+                    job.id,
+                )
+                return False
+            if settled:
                 self.log.warning(
-                    'Worker %s: job %s is already finished; ignoring error during finalization: %s',
+                    'Worker %s: job %s already settled; ignoring error during finalization: %s',
                     self.name,
                     job.id,
                     exc_info[1],

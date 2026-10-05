@@ -984,6 +984,81 @@ class TestStartedJobRegistry(RQTestCase):
         job.refresh()
         self.assertEqual(job.get_status(), JobStatus.FINISHED)
 
+    def test_a_job_without_a_kept_result_is_not_run_again_when_the_reply_is_lost(self):
+        """With result_ttl=0 the success deletes the job hash, so there is no status to read."""
+        key = 'due-work:runs'
+        job = self.queue.enqueue(
+            rpush, key, 'ran', get_connection_kwargs(self.connection), retry=Retry(max=1), result_ttl=0
+        )
+        handle_job_success = SimpleWorker.handle_job_success
+
+        def reply_lost(worker, *args, **kwargs):
+            handle_job_success(worker, *args, **kwargs)
+            raise redis.exceptions.ConnectionError('Connection closed by server.')
+
+        with mock.patch.object(SimpleWorker, 'handle_job_success', reply_lost):
+            SimpleWorker([self.queue], connection=self.connection).work(burst=True)
+        SimpleWorker([self.queue], connection=self.connection).work(burst=True)
+
+        self.assertEqual(self.connection.lrange(key, 0, -1), [b'ran'])
+        self.assertFalse(self.connection.exists(job.key))
+        self.assertNotIn(job.id, self.queue.failed_job_registry)
+
+    def test_a_lost_exec_reply_does_not_replay_the_success(self):
+        """redis-py reports a dropped connection on a watched pipeline as WatchError,
+        even when Redis already applied the EXEC."""
+        job = self.queue.enqueue(say_hello)
+        worker = SimpleWorker([self.queue], connection=self.connection)
+        started_key = self.queue.started_job_registry.key
+        execute = redis.client.Pipeline.execute
+        lost = []
+
+        def execute_and_lose_reply(pipeline, *args, **kwargs):
+            settles_execution = pipeline.watching and any(
+                as_text(command[0]) == 'ZREM' and as_text(command[1]) == started_key
+                for command, _options in pipeline.command_stack
+            )
+            result = execute(pipeline, *args, **kwargs)
+            if settles_execution and not lost:
+                lost.append(True)
+                raise redis.exceptions.WatchError('A ConnectionError occurred while watching one or more keys')
+            return result
+
+        with (
+            mock.patch.object(redis.client.Pipeline, 'execute', execute_and_lose_reply),
+            mock.patch.object(
+                worker, 'increment_successful_job_count', wraps=worker.increment_successful_job_count
+            ) as increment,
+        ):
+            worker.work(burst=True)
+
+        self.assertEqual(lost, [True])
+        self.assertEqual(job.get_status(), JobStatus.FINISHED)
+        self.assertEqual(len(job.results()), 1)
+        self.assertEqual(increment.call_count, 1)
+
+    def test_an_unknown_outcome_is_left_to_registry_cleanup(self):
+        """If the worker cannot tell whether the success committed, it must not fail or
+        retry the job itself. The started registry entry decides later."""
+        job = self.queue.enqueue(say_hello, retry=Retry(max=1))
+        error = redis.exceptions.ConnectionError('Connection closed by server.')
+
+        with (
+            mock.patch.object(SimpleWorker, 'handle_job_success', side_effect=error),
+            mock.patch.object(SimpleWorker, '_execution_has_settled', side_effect=error),
+        ):
+            SimpleWorker([self.queue], connection=self.connection).work(burst=True)
+
+        job.refresh()
+        self.assertEqual(job.get_status(), JobStatus.STARTED)
+        self.assertEqual(job.retries_left, 1)
+        self.assertIn(job.id, self.queue.started_job_registry)
+
+        self.queue.started_job_registry.cleanup(current_timestamp() + 10_000)
+        job.refresh()
+        self.assertEqual(job.get_status(), JobStatus.QUEUED)
+        self.assertEqual(job.retries_left, 0)
+
     def test_warnings_on_add_remove_and_exception(self):
         """Test backwards compatibility of the .add and .remove methods for
         the StartedJobRegistry."""

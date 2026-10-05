@@ -4,7 +4,7 @@
 * `get_current_job()` now uses `contextvars` instead of thread-locals; gevent-based custom workers need `greenlet` >= 0.4.17. Thanks @selwin!
 * `Worker.handle_job_success()` now requires an `execution` argument, a breaking change for subclasses that override or call this method. Thanks @selwin!
 * RQ now disables propagation on loggers it configures itself to prevent double logging when applications configure logging afterwards. Thanks @selwin!
-* Fixed a bug where a lost reply after the success write could fail a finished job and run it again via `Retry`. Thanks @gyanu2507!
+* Fixed a bug where a lost reply after the success write could fail a finished job and run it again via `Retry`, or record its success twice. Thanks @gyanu2507!
 
 ### RQ 2.12.0 (2026-08-30)
 * Added `CronJobRegistry` so cron job histories can be monitored without an active `CronScheduler`. Thanks @selwin!
