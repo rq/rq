@@ -24,7 +24,7 @@ Breaking Changes:
 
 
 Bug Fixes:
-* `Job.delete()` now also removes the job's stored execution results.
+* `Job.delete()` and `Queue.empty()` now also remove the deleted jobs' stored execution results.
 * `enqueue_at()` and `enqueue_in()` now honor `unique=True`. Thanks @jamalkamaladdin!
 * Job repeats are now scheduled against UTC instead of the local wall clock. Thanks @dylanpulver!
 * `StartedJobRegistry.cleanup()` no longer marks finished jobs as abandoned. Thanks @gyanu2507!
