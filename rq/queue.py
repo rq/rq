@@ -306,8 +306,11 @@ class Queue:
         Returns:
             script (...): The Lua Script is called.
         """
+        from .results import Result
+
         script = f"""
             local prefix = "{self.job_class.redis_job_namespace_prefix}"
+            local result_prefix = "{Result.get_key('')}"
             local q = KEYS[1]
             local count = 0
             while true do
@@ -317,7 +320,7 @@ class Queue:
                 end
 
                 -- Delete the relevant keys
-                redis.call("del", prefix..job_id)
+                redis.call("del", prefix..job_id, result_prefix..job_id)
                 redis.call("del", prefix..job_id..":dependents")
                 count = count + 1
             end
