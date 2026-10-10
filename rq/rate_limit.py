@@ -275,18 +275,17 @@ class RateLimitRegistry:
         with waiting jobs.
 
         Call after the job was canceled or deleted, so its status is no longer queued or started.
-        Without a pipeline, if the job has a live execution, its slot is not released.
+        If the job has a live execution, its slot is not released.
 
         Args:
             job_id: The job ID to remove.
-            pipeline: If given, both removals are queued on it even if the job has a live
-                execution, and nothing is promoted until a later release or cleanup.
+            pipeline: If given, only the removal from rate_limited is queued on it. The job's slot
+                stays held until its execution ends or cleanup finds no live execution.
 
         Returns:
             The promoted job ids; always [] with a pipeline.
         """
         if pipeline is not None:
-            pipeline.zrem(self.allowed_key, job_id)
             pipeline.zrem(self.rate_limited_key, job_id)
             return []
 

@@ -1433,8 +1433,8 @@ class Job:
             from .rate_limit import RateLimitRegistry
 
             # No-pipeline: if the job has no live execution, release its slot and promote immediately.
-            # Caller-owned pipeline: buffer the ZREMs into the caller's transaction without
-            # promoting — the next release/acquire or maintenance cleanup promotes.
+            # Caller-owned pipeline: only drop it from rate_limited; its slot is released and
+            # waiting jobs promoted by the horse's release or maintenance cleanup.
             RateLimitRegistry.from_job(self).cancel(self.id, pipeline=pipeline)
 
     def delete_dependents(self, pipeline: Pipeline | None = None):

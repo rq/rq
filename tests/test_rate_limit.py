@@ -852,6 +852,17 @@ class TestRateLimitEnqueue(RQTestCase):
         worker.handle_job_success(started_job, self.queue, StartedJobRegistry(connection=self.connection), execution)
         self.assertEqual(registry.get_allowed_job_ids(), [waiting_job.id])
 
+    def test_delete_started_job_with_pipeline_keeps_slot(self) -> None:
+        """If a started job is deleted via a pipeline, it keeps its slot, even through cleanup."""
+        _, started_job, _, _ = self._start_rate_limited_job()
+        registry = RateLimitRegistry(key='test', connection=self.connection)
+
+        pipe = self.connection.pipeline()
+        Job.fetch(started_job.id, connection=self.connection).delete(pipeline=pipe)
+        pipe.execute()
+        registry.cleanup()
+        self.assertEqual(registry.get_allowed_job_ids(), [started_job.id])
+
     def test_cancel_started_job_frees_slot_after_execution_expires(self) -> None:
         """If a canceled job's execution expires (e.g. its worker died), cleanup frees its slot."""
         _, started_job, execution, waiting_job = self._start_rate_limited_job()
@@ -880,9 +891,8 @@ class TestRateLimitEnqueue(RQTestCase):
         self.assertNotEqual(job1.get_status(refresh=True), JobStatus.CANCELED)
 
     def test_delete_with_pipeline_removes_from_registry(self):
-        """Deleting via a caller-owned pipeline buffers the rate-limit removal into the
-        transaction (no in-transaction promotion). A deleted rate_limited job is dropped and
-        cannot be resurrected; the freed slot is promoted by later cleanup."""
+        """Deleting via a caller-owned pipeline drops a rate_limited job, so it cannot be
+        resurrected. A deleted allowed job keeps its slot until cleanup releases it."""
         rate_limit = RateLimit(key='test', concurrency=1)
 
         job1 = self.queue.enqueue(say_hello, rate_limit=rate_limit)  # allowed
@@ -897,18 +907,15 @@ class TestRateLimitEnqueue(RQTestCase):
         self.assertNotIn(job2.id, registry.get_rate_limited_job_ids())
         self.assertIn(job1.id, registry.get_allowed_job_ids())
 
-        # Delete the allowed job via a pipeline → dropped from allowed on EXEC, but the
-        # rate_limited job is not promoted inside the caller transaction.
+        # Delete the allowed job via a pipeline → it keeps its slot until cleanup.
         pipe = self.connection.pipeline()
         job1.delete(pipeline=pipe)
         pipe.execute()
-        self.assertNotIn(job1.id, registry.get_allowed_job_ids())
-        self.assertEqual(registry.get_allowed_job_count(), 0)
-        self.assertIn(job3.id, registry.get_rate_limited_job_ids())
+        self.assertEqual(registry.get_allowed_job_ids(), [job1.id])
 
-        # Maintenance cleanup promotes job3 — not the deleted job2 — proving job2 is gone.
+        # Cleanup releases job1's slot and promotes job3 — not the deleted job2 — proving job2 is gone.
         registry.cleanup()
-        self.assertIn(job3.id, registry.get_allowed_job_ids())
+        self.assertEqual(registry.get_allowed_job_ids(), [job3.id])
         self.assertEqual(job3.get_status(), JobStatus.QUEUED)
 
     def test_enqueue_with_pipeline_is_rejected(self):
