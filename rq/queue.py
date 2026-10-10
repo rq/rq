@@ -26,14 +26,14 @@ if TYPE_CHECKING:
     from .job import Retry
 
 from .callbacks import Callback, execute_failure_callback, execute_success_callback
-from .defaults import DEFAULT_RESULT_TTL
+from .defaults import DEFAULT_RESULT_TTL, RQ_KEY_PREFIX
 from .dependency import Dependency
 from .exceptions import DequeueTimeout, NoSuchJobError
 from .intermediate_queue import IntermediateQueue
 from .job import Job, JobStatus
 from .job_lifecycle import format_exc_info, record_job_failure
 from .logutils import blue, green
-from .rate_limit import RateLimit
+from .rate_limit import RateLimit, RateLimitRegistry
 from .repeat import Repeat
 from .scripts import save_unique_job, schedule_unique_job
 from .serializers import Serializer, resolve_serializer
@@ -107,8 +107,8 @@ class Queue:
     job_class: type[Job] = Job
     death_penalty_class: type[BaseDeathPenalty] = UnixSignalDeathPenalty
     DEFAULT_TIMEOUT: int = 180  # Default timeout seconds.
-    redis_queue_namespace_prefix: str = 'rq:queue:'
-    redis_queues_keys: str = 'rq:queues'
+    redis_queue_namespace_prefix: str = RQ_KEY_PREFIX + ':queue:'
+    redis_queues_keys: str = RQ_KEY_PREFIX + ':queues'
 
     @classmethod
     def all(
@@ -268,7 +268,7 @@ class Queue:
     @property
     def registry_cleaning_key(self):
         """Redis key used to indicate this queue has been cleaned."""
-        return f'rq:clean_registries:{self.name}'
+        return f'{RQ_KEY_PREFIX}:clean_registries:{self.name}'
 
     @property
     def scheduler_pid(self) -> int | None:
@@ -306,8 +306,11 @@ class Queue:
         Returns:
             script (...): The Lua Script is called.
         """
+        from .results import Result
+
         script = f"""
             local prefix = "{self.job_class.redis_job_namespace_prefix}"
+            local result_prefix = "{Result.get_key('')}"
             local q = KEYS[1]
             local count = 0
             while true do
@@ -317,7 +320,7 @@ class Queue:
                 end
 
                 -- Delete the relevant keys
-                redis.call("del", prefix..job_id)
+                redis.call("del", prefix..job_id, result_prefix..job_id)
                 redis.call("del", prefix..job_id..":dependents")
                 count = count + 1
             end
@@ -881,7 +884,7 @@ class Queue:
         to represent the delayed function calls and enqueues them.
 
         Args:
-            job_datas (List['EnqueueData']): A List of job data
+            job_datas (Iterable[EnqueueData]): An iterable of job data
             pipeline (Optional[Pipeline], optional): The Redis Pipeline. Defaults to None.
 
         Returns:
@@ -919,8 +922,16 @@ class Queue:
                 'repeat': job_data.repeat,
             }
 
+        # Partition in one pass so that job_datas can be a one-shot iterable.
+        job_datas_without_dependencies = []
+        job_datas_with_dependencies = []
+        for job_data in job_datas:
+            if job_data.depends_on:
+                job_datas_with_dependencies.append(job_data)
+            else:
+                job_datas_without_dependencies.append(job_data)
+
         # Enqueue jobs without dependencies
-        job_datas_without_dependencies = [job_data for job_data in job_datas if not job_data.depends_on]
         if job_datas_without_dependencies:
             jobs_without_dependencies = [
                 self._enqueue_job(
@@ -933,7 +944,6 @@ class Queue:
             if pipeline is None:
                 pipe.execute()
 
-        job_datas_with_dependencies = [job_data for job_data in job_datas if job_data.depends_on]
         if job_datas_with_dependencies:
             # Save all jobs with dependencies as deferred
             jobs_with_dependencies = [
@@ -1134,7 +1144,7 @@ class Queue:
             on_stopped,
             rate_limit,
             pipeline,
-            unique,  # Not used for scheduled jobs, but parsed for consistency
+            unique,
             args,
             kwargs,
             webhooks,
@@ -1162,7 +1172,7 @@ class Queue:
         )
         if at_front:
             job.enqueue_at_front = True
-        return self.schedule_job(job, datetime, pipeline=pipeline)
+        return self.schedule_job(job, datetime, pipeline=pipeline, unique=unique)
 
     def schedule_job(self, job: Job, datetime: datetime, pipeline: Pipeline | None = None, unique: bool = False) -> Job:
         """Puts job on ScheduledJobRegistry
@@ -1176,9 +1186,14 @@ class Queue:
 
         Returns:
             Job: The scheduled job
+
+        Raises:
+            ValueError: If the job is rate limited and its class or this queue's class overrides
+                the default key prefix
         """
         from .registry import ScheduledJobRegistry
 
+        self._check_rate_limit_namespace(job)
         registry = ScheduledJobRegistry(queue=self)
 
         if unique and not job._id:
@@ -1229,7 +1244,11 @@ class Queue:
 
         Raises:
             ValueError: If unique=True and job has dependencies
+            ValueError: If the job is rate limited and its class or this queue's class overrides
+                the default key prefix
+            ValueError: If the job is rate limited and a pipeline is given
         """
+        self._check_rate_limit_namespace(job)
         if unique and not job._id:
             raise ValueError('unique=True requires an explicit job_id')
         if unique and job._dependency_ids:
@@ -1238,6 +1257,10 @@ class Queue:
             raise ValueError('unique=True is not supported with rate-limited jobs')
         if job.has_rate_limit and not self._is_async:
             raise ValueError('rate_limit is not supported on synchronous queues (is_async=False)')
+        # Promotion would run inside the caller's pipeline, so a later save of the returned
+        # job on that pipeline would overwrite the promoted status.
+        if job.has_rate_limit and pipeline is not None:
+            raise ValueError('rate-limited jobs cannot be enqueued with a pipeline')
 
         job.origin = self.name
         job = self.setup_dependencies(job, pipeline=pipeline)
@@ -1249,24 +1272,30 @@ class Queue:
         # If we do not depend on an unfinished job, enqueue the job.
         if job.get_status(refresh=False) != JobStatus.DEFERRED:
             if job.has_rate_limit:
-                return self._enqueue_rate_limited_job(job, at_front=at_front)
+                return self._enqueue_rate_limited_job(job, pipeline=pipeline, at_front=at_front)
             return self._enqueue_job(job, pipeline=pipeline, at_front=at_front, unique=unique)
         return job
+
+    def _check_rate_limit_namespace(self, job: Job) -> None:
+        """Rejects a rate-limited job whose class or this queue's class overrides the default
+        key prefix, since the rate limiter builds keys from the base `Job` and `Queue` prefixes."""
+        if job.has_rate_limit and (
+            job.redis_job_namespace_prefix != Job.redis_job_namespace_prefix
+            or self.redis_queue_namespace_prefix != Queue.redis_queue_namespace_prefix
+        ):
+            raise ValueError('rate_limit is not supported with custom job or queue key prefixes')
 
     def _enqueue_rate_limited_job(self, job: Job, pipeline: Pipeline | None = None, at_front: bool = False) -> Job:
         """Enqueue a job through the rate limit registry.
 
-        Saves the job to Redis and adds it to the rate_limited set atomically, then
-        attempts to acquire capacity and enqueue it. If no capacity is available,
-        the job stays in the rate_limited set with RATE_LIMITED status.
+        Saves the job as rate_limited and adds it to the waiting set atomically, then fills
+        free slots with waiting jobs, oldest first. Without a free slot, the job keeps waiting.
 
         Args:
             job (Job): The job to enqueue (must have rate_limit_key and rate_limit_concurrency set)
-            pipeline (Optional[Pipeline]): If provided, the caller owns the pipeline: this
-                method only appends its rate-limit ops and returns; the caller must execute
-                the pipeline and then call
-                RateLimitRegistry.acquire_and_enqueue(job.rate_limit_concurrency) itself.
-                If None, this method executes and runs acquire_and_enqueue.
+            pipeline (Optional[Pipeline]): If given, the job's writes and promotion are queued on it
+                and run when it executes. Don't save the job on it afterwards; that would overwrite
+                the promoted status.
             at_front (bool): Whether the job should be pushed to the front of its queue when
                 promoted. Persisted on the job so the (possibly later, cross-worker) promotion
                 can honor it.
@@ -1281,7 +1310,7 @@ class Queue:
 
         assert job.rate_limit_concurrency
 
-        registry = job.rate_limit_registry
+        registry = RateLimitRegistry.from_job(job)
         job._status = JobStatus.RATE_LIMITED
         if at_front:
             job.enqueue_at_front = True
@@ -1291,14 +1320,16 @@ class Queue:
         job.cleanup(ttl=job.ttl, pipeline=pipe)
         registry.add_to_rate_limited(job.id, pipe)
 
-        if pipeline is None:
-            pipe.execute()
-            enqueued_at = now()
-            enqueued_job_id = registry.acquire_and_enqueue(job.rate_limit_concurrency, enqueued_at=enqueued_at)
-            if enqueued_job_id == job.id:
-                job._status = JobStatus.QUEUED
-                job.enqueued_at = enqueued_at
+        if pipeline is not None:
+            registry.acquire_and_enqueue(job.rate_limit_concurrency, pipeline=pipe)
+            return job
 
+        pipe.execute()
+        enqueued_at = now()
+        promoted_job_ids = registry.acquire_and_enqueue(job.rate_limit_concurrency, enqueued_at=enqueued_at)
+        if job.id in promoted_job_ids:
+            job._status = JobStatus.QUEUED
+            job.enqueued_at = enqueued_at
         return job
 
     def _enqueue_job(

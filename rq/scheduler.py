@@ -17,7 +17,12 @@ from redis import ConnectionPool, Redis
 from redis.client import Pipeline
 
 from .connections import parse_connection
-from .defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT, DEFAULT_SCHEDULER_FALLBACK_PERIOD
+from .defaults import (
+    DEFAULT_LOGGING_DATE_FORMAT,
+    DEFAULT_LOGGING_FORMAT,
+    DEFAULT_SCHEDULER_FALLBACK_PERIOD,
+    RQ_KEY_PREFIX,
+)
 from .exceptions import SchedulerNotFound
 from .job import Job
 from .logutils import setup_loghandlers
@@ -33,8 +38,8 @@ try:
 except ValueError:
     ForkProcess = Process
 
-SCHEDULER_KEY_TEMPLATE = 'rq:scheduler:%s'
-SCHEDULER_LOCKING_KEY_TEMPLATE = 'rq:scheduler-lock:%s'
+SCHEDULER_KEY_TEMPLATE = RQ_KEY_PREFIX + ':scheduler:%s'
+SCHEDULER_LOCKING_KEY_TEMPLATE = RQ_KEY_PREFIX + ':scheduler-lock:%s'
 
 
 class SchedulerStatus(str, Enum):
@@ -268,10 +273,8 @@ class RQScheduler:
             for job in jobs_with_rate_limit:
                 with self.connection.pipeline() as pipeline:
                     registry.remove(job.id, pipeline=pipeline)
-                    queue._enqueue_rate_limited_job(job, pipeline=pipeline)
+                    queue._enqueue_rate_limited_job(job, pipeline=pipeline, at_front=job.should_enqueue_at_front())
                     pipeline.execute()
-                assert job.rate_limit_concurrency
-                job.rate_limit_registry.acquire_and_enqueue(job.rate_limit_concurrency)
         self._status = self.Status.STARTED
 
     def _install_signal_handlers(self):

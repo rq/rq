@@ -91,6 +91,42 @@ async def raise_on_cancel_async(seconds):
         raise ValueError('cleanup failed')
 
 
+async def record_job_loop(state, error=None):
+    """Record the coroutine job's loop and context, optionally raising an error."""
+    state['loop'] = asyncio.get_running_loop()
+    state['job'] = get_current_job()
+    if error is not None:
+        raise error
+    return 42
+
+
+async def leave_async_resources(state):
+    """Leave a pending task and an asynchronous generator for the job to finalize."""
+    state['loop'] = asyncio.get_running_loop()
+    started = asyncio.Event()
+
+    async def background():
+        try:
+            started.set()
+            await asyncio.Event().wait()
+        finally:
+            await asyncio.sleep(0)
+            state['task_closed'] = True
+
+    async def generate():
+        try:
+            yield 1
+        finally:
+            await asyncio.sleep(0)
+            state['generator_closed'] = True
+
+    state['task'] = asyncio.create_task(background())
+    state['generator'] = generate()
+    await state['generator'].__anext__()
+    await started.wait()
+    return 42
+
+
 def say_hello_unicode(name=None):
     """A job with a single argument and a return value."""
     return str(say_hello(name))  # noqa

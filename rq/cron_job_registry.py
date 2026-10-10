@@ -5,12 +5,12 @@ import time
 from redis import Redis
 from redis.client import Pipeline
 
-from .defaults import DEFAULT_CRON_JOB_HISTORY_TTL
+from .defaults import DEFAULT_CRON_JOB_HISTORY_TTL, RQ_KEY_PREFIX
 
 
 def get_registry_key() -> str:
     """Get the Redis key for the cron job name registry"""
-    return 'rq:cron_jobs'
+    return f'{RQ_KEY_PREFIX}:cron_jobs'
 
 
 def add(name: str, connection: Redis | Pipeline, enqueue_timestamp: float | None = None) -> None:

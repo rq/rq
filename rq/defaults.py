@@ -1,3 +1,17 @@
+import os
+import re
+
+RQ_KEY_PREFIX = os.environ.get('RQ_KEY_PREFIX', 'rq')
+"""The prefix used for all Redis keys managed by RQ.
+Override via the RQ_KEY_PREFIX environment variable before importing rq."""
+
+# The prefix is spliced into %-templates, str.format() templates and Lua source, so only allow safe characters.
+if not re.fullmatch(r'[A-Za-z0-9_.:{}-]+', RQ_KEY_PREFIX):
+    raise ValueError(f'Invalid RQ_KEY_PREFIX {RQ_KEY_PREFIX!r}: only letters, digits, and _ . : - {{ }} are allowed')
+
+FORMAT_KEY_PREFIX = RQ_KEY_PREFIX.replace('{', '{{').replace('}', '}}')
+"""Prefix with braces escaped for templates consumed by `str.format()`."""
+
 DEFAULT_JOB_CLASS = 'rq.job.Job'
 """ The path for the default Job class to use.
 Defaults to the main `Job` class within the `rq.job` module

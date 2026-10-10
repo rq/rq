@@ -7,8 +7,9 @@ if TYPE_CHECKING:
 
     from rq.worker import BaseWorker
 
+from .defaults import RQ_KEY_PREFIX
 
-WORKERS_SUSPENDED = 'rq:suspended'
+WORKERS_SUSPENDED = RQ_KEY_PREFIX + ':suspended'
 
 
 def is_suspended(connection: Redis, worker: BaseWorker | None = None):

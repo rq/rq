@@ -14,11 +14,12 @@ if TYPE_CHECKING:
 
     from .worker.base import BaseWorker
 
+from .defaults import FORMAT_KEY_PREFIX, RQ_KEY_PREFIX
 from .job import Job
 from .registry import BaseRegistry, StartedJobRegistry
 from .utils import as_text, current_timestamp, now, parse_composite_key
 
-WORKER_EXECUTIONS_KEY_TEMPLATE = 'rq:worker:{0}:executions'
+WORKER_EXECUTIONS_KEY_TEMPLATE = FORMAT_KEY_PREFIX + ':worker:{0}:executions'
 
 
 class Execution:
@@ -45,7 +46,7 @@ class Execution:
 
     @property
     def key(self) -> str:
-        return f'rq:execution:{self.composite_key}'
+        return f'{RQ_KEY_PREFIX}:execution:{self.composite_key}'
 
     @property
     def job(self) -> Job:
@@ -147,7 +148,7 @@ class ExecutionRegistry(BaseRegistry):
     Each job has its own execution registry.
     """
 
-    key_template = 'rq:executions:{0}'
+    key_template = FORMAT_KEY_PREFIX + ':executions:{0}'
 
     def __init__(self, job_id: str, connection: Redis):
         self.connection = connection

@@ -25,6 +25,7 @@ from .defaults import (
     DEFAULT_LOGGING_DATE_FORMAT,
     DEFAULT_LOGGING_FORMAT,
     DEFAULT_RESULT_TTL,
+    RQ_KEY_PREFIX,
 )
 from .exceptions import SchedulerNotFound, StopRequested
 from .job import Job
@@ -48,7 +49,7 @@ from .webhook import Webhook
 
 def get_cron_job_history_key(name: str) -> str:
     """Redis key of the sorted set holding IDs of jobs spawned by the named cron job"""
-    return f'rq:cron_job:{name}:jobs'
+    return f'{RQ_KEY_PREFIX}:cron_job:{name}:jobs'
 
 
 def get_cron_job_ids(name: str, connection: Redis, start: int = 0, end: int = -1) -> list[str]:
@@ -115,8 +116,7 @@ class CronJob:
 
         # For cron jobs, set initial next_enqueue_time during initialization
         if self.cron:
-            cron_iter = croniter(self.cron, now())
-            self.next_enqueue_time = cron_iter.get_next(datetime)
+            self.next_enqueue_time = self.get_next_enqueue_time()
         self.job_options: dict[str, Any] = {
             'job_timeout': job_timeout,
             'result_ttl': result_ttl,
@@ -166,9 +166,16 @@ class CronJob:
     def get_next_enqueue_time(self) -> datetime:
         """Calculate the next run time based on interval or cron expression"""
         if self.cron:
-            # Use cron expression to calculate next run time
-            cron_iter = croniter(self.cron, self.latest_enqueue_time or now())
-            return cron_iter.get_next(datetime)
+            base_time = self.latest_enqueue_time or now()
+            # Cron fields match local time. Repeated local times convert to their first occurrence,
+            # which can be earlier than base_time during a repeated hour, so skip those.
+            cron_iter = croniter(self.cron, base_time.astimezone().replace(tzinfo=None))
+            while True:
+                local_candidate = cron_iter.get_next(datetime)
+                # Convert via timestamp(): before Python 3.12, astimezone() inverts fold for skipped times
+                candidate_utc = datetime.fromtimestamp(local_candidate.replace(fold=0).timestamp(), timezone.utc)
+                if candidate_utc > base_time:
+                    return candidate_utc
         elif self.interval and self.latest_enqueue_time:
             # Use interval-based calculation
             return self.latest_enqueue_time + timedelta(seconds=self.interval)
@@ -526,7 +533,7 @@ class CronScheduler:
     @property
     def key(self) -> str:
         """Redis key for this CronScheduler instance"""
-        return f'rq:cron_scheduler:{self.name}'
+        return f'{RQ_KEY_PREFIX}:cron_scheduler:{self.name}'
 
     def to_dict(self) -> dict:
         """Convert CronScheduler instance to a dictionary for Redis storage"""
@@ -576,7 +583,7 @@ class CronScheduler:
     @classmethod
     def fetch(cls, name: str, connection: Redis) -> CronScheduler:
         """Fetch a CronScheduler instance from Redis by name."""
-        key = f'rq:cron_scheduler:{name}'
+        key = f'{RQ_KEY_PREFIX}:cron_scheduler:{name}'
         raw_data = connection.hgetall(key)
 
         if not raw_data:
