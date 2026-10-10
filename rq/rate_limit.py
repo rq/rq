@@ -6,6 +6,7 @@ from functools import cached_property
 from redis import Redis
 from redis.client import Pipeline
 
+from .defaults import RQ_KEY_PREFIX
 from .job import Job, JobStatus
 from .utils import as_text, current_timestamp, now, utcformat
 
@@ -115,7 +116,7 @@ class RateLimitRegistry:
     - rq:rl:{key}:rate_limited — sorted set of job IDs the limiter is holding back
     """
 
-    rl_keys_key = 'rq:rl-keys'
+    rl_keys_key = RQ_KEY_PREFIX + ':rl-keys'
 
     def __init__(self, key: str, connection: Redis):
         self.key = key
@@ -150,15 +151,15 @@ class RateLimitRegistry:
 
     @property
     def config_key(self) -> str:
-        return f'rq:rl:{self.key}'
+        return f'{RQ_KEY_PREFIX}:rl:{self.key}'
 
     @property
     def allowed_key(self) -> str:
-        return f'rq:rl:{self.key}:allowed'
+        return f'{RQ_KEY_PREFIX}:rl:{self.key}:allowed'
 
     @property
     def rate_limited_key(self) -> str:
-        return f'rq:rl:{self.key}:rate_limited'
+        return f'{RQ_KEY_PREFIX}:rl:{self.key}:rate_limited'
 
     def get_allowed_job_ids(self) -> list[str]:
         """Returns job IDs in the allowed set, ordered by timestamp."""
