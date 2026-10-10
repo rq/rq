@@ -95,11 +95,11 @@ end
 
 # Lua: if both allowed and rate_limited sets are empty, drop the key from rq:rl-keys
 # and delete the config hash and sorted sets. Returns 1 if cleaned up, 0 if not empty.
-# KEYS: allowed_key, rate_limited_key, config_key
-# ARGV: rl_keys_key, key
+# KEYS: allowed_key, rate_limited_key, config_key, rl_keys_key
+# ARGV: key
 CLEANUP_REGISTRY_SCRIPT = """
 if redis.call('ZCARD', KEYS[1]) == 0 and redis.call('ZCARD', KEYS[2]) == 0 then
-    redis.call('SREM', ARGV[1], ARGV[2])
+    redis.call('SREM', KEYS[4], ARGV[1])
     redis.call('DEL', KEYS[1], KEYS[2], KEYS[3])
     return 1
 end
@@ -335,8 +335,8 @@ class RateLimitRegistry:
 
         # Atomically remove registry if empty
         self._cleanup_script(
-            keys=[self.allowed_key, self.rate_limited_key, self.config_key],
-            args=[self.rl_keys_key, self.key],
+            keys=[self.allowed_key, self.rate_limited_key, self.config_key, self.rl_keys_key],
+            args=[self.key],
         )
 
 
