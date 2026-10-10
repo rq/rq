@@ -94,8 +94,9 @@ overwrite the promoted status.
   (`rate_limit.release_slot`). An immediate retry or repeat keeps its slot; a
   scheduled one releases it and re-acquires one when due.
 - **Cancel and delete** — both remove the job from the rate limit sets and fill free
-  slots with waiting jobs. Deleting through a caller pipeline leaves promotion to a later
-  release or cleanup; cancelling through one is rejected.
+  slots with waiting jobs, but a job with a live execution keeps its slot until the
+  execution ends. Deleting through a caller pipeline keeps the slot until the execution
+  ends or cleanup finds no live execution; cancelling through one is rejected.
 
 ## Rate Limit Registry Cleanup
 

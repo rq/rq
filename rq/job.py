@@ -1417,7 +1417,10 @@ class Job:
 
         if delete_dependents:
             self.delete_dependents(pipeline=pipeline)
-        self.execution_registry.delete(job=self, pipeline=connection)  # type: ignore
+        if not self.has_rate_limit:
+            # If a rate-limited job is still running (has a live execution), we don't delete the execution.
+            # Deleting it could free the job's slot and enqueue another job, going over the allowed concurrency.
+            self.execution_registry.delete(job=self, pipeline=connection)  # type: ignore
         if self.group_id:
             from .group import Group
 
@@ -1429,9 +1432,9 @@ class Job:
         if self.has_rate_limit:
             from .rate_limit import RateLimitRegistry
 
-            # No-pipeline: remove + promote immediately (after the hash delete above).
-            # Caller-owned pipeline: buffer the ZREMs into the caller's transaction without
-            # promoting — the next release/acquire or maintenance cleanup promotes.
+            # No-pipeline: if the job has no live execution, release its slot and promote immediately.
+            # Caller-owned pipeline: only drop it from rate_limited; its slot is released and
+            # waiting jobs promoted by the horse's release or maintenance cleanup.
             RateLimitRegistry.from_job(self).cancel(self.id, pipeline=pipeline)
 
     def delete_dependents(self, pipeline: Pipeline | None = None):
