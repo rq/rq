@@ -13,6 +13,7 @@ from rq.registry import (
     ScheduledJobRegistry,
     StartedJobRegistry,
 )
+from rq.results import Result
 from rq.serializers import JSONSerializer
 from rq.worker import Worker
 from tests import RQTestCase, min_redis_version
@@ -90,6 +91,21 @@ class TestQueue(RQTestCase):
         q.empty()
         self.assertFalse(Job.exists(job.id, connection=self.connection))
 
+    def test_empty_removes_results(self):
+        queue = Queue(connection=self.connection)
+        job = queue.enqueue(say_hello)
+        Result.create(job, Result.Type.FAILED, ttl=-1, exc_string='Previous attempt failed')
+        Result.create(job, Result.Type.RETRIED, ttl=-1)
+        other_job = Queue('other', connection=self.connection).enqueue(say_hello)
+        Result.create(other_job, Result.Type.FAILED, ttl=-1, exc_string='Other failure')
+        self.assertEqual(len(job.results()), 2)
+        self.assertEqual(self.connection.ttl(Result.get_key(job.id)), -1)
+
+        self.assertEqual(queue.empty(), 1)
+
+        self.assertEqual(job.results(), [])
+        self.assertEqual(len(other_job.results()), 1)
+
     def test_queue_is_empty(self):
         """Detecting empty queues."""
         q = Queue(connection=self.connection)
@@ -103,6 +119,7 @@ class TestQueue(RQTestCase):
         q = Queue(connection=self.connection)
         job = q.enqueue(say_hello)
         job2 = q.enqueue(say_hello)
+        Result.create(job, Result.Type.RETRIED, ttl=-1)
 
         self.assertEqual(2, len(q.get_job_ids()))
 
@@ -111,6 +128,7 @@ class TestQueue(RQTestCase):
         self.assertEqual(0, len(q.get_job_ids()))
         self.assertEqual(False, self.connection.exists(job.key))
         self.assertEqual(False, self.connection.exists(job2.key))
+        self.assertEqual(job.results(), [])
         self.assertEqual(0, len(self.connection.smembers(Queue.redis_queues_keys)))
         self.assertEqual(False, self.connection.exists(q.key))
 
@@ -119,6 +137,7 @@ class TestQueue(RQTestCase):
         q = Queue(connection=self.connection)
         job = q.enqueue(say_hello)
         job2 = q.enqueue(say_hello)
+        Result.create(job, Result.Type.RETRIED, ttl=-1)
 
         self.assertEqual(2, len(q.get_job_ids()))
 
@@ -127,6 +146,7 @@ class TestQueue(RQTestCase):
         self.assertEqual(0, len(q.get_job_ids()))
         self.assertEqual(True, self.connection.exists(job.key))
         self.assertEqual(True, self.connection.exists(job2.key))
+        self.assertEqual(len(job.results()), 1)
         self.assertEqual(0, len(self.connection.smembers(Queue.redis_queues_keys)))
         self.assertEqual(False, self.connection.exists(q.key))
 

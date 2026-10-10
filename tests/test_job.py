@@ -20,6 +20,7 @@ from rq.registry import (
     ScheduledJobRegistry,
     StartedJobRegistry,
 )
+from rq.results import Result
 from rq.serializers import JSONSerializer
 from rq.utils import as_text, now, utcformat
 from rq.worker import Worker
@@ -725,6 +726,39 @@ class TestJob(RQTestCase):
 
         job.delete()
         self.assertNotIn(job, registry)
+
+    def test_job_delete_removes_results(self):
+        """Deleting a job also removes its stored execution results."""
+        job = Job.create(fixtures.say_hello, connection=self.connection, status=JobStatus.FINISHED)
+        job.save()
+        Result.create_failure(job, ttl=-1, exc_string='failed attempt')
+        Result.create(job, Result.Type.SUCCESSFUL, ttl=-1, return_value='Hello')
+        other_job = Job.create(fixtures.say_hello, connection=self.connection, status=JobStatus.FINISHED)
+        other_job.save()
+        Result.create(other_job, Result.Type.SUCCESSFUL, ttl=-1, return_value='Other result')
+
+        self.assertEqual(Result.count(job), 2)
+        job.delete()
+
+        self.assertFalse(self.connection.exists(job.key))
+        self.assertFalse(self.connection.exists(Result.get_key(job.id)))
+        self.assertEqual(job.results(), [])
+        self.assertEqual(other_job.return_value(), 'Other result')
+
+    def test_job_delete_results_with_pipeline(self):
+        """Result deletion waits for the caller's pipeline to execute."""
+        job = Job.create(fixtures.say_hello, connection=self.connection, status=JobStatus.FINISHED)
+        job.save()
+        Result.create(job, Result.Type.SUCCESSFUL, ttl=500, return_value='Hello')
+
+        with self.connection.pipeline() as pipeline:
+            job.delete(pipeline=pipeline)
+            self.assertTrue(self.connection.exists(job.key))
+            self.assertEqual(job.return_value(), 'Hello')
+            pipeline.execute()
+
+        self.assertFalse(self.connection.exists(job.key))
+        self.assertFalse(self.connection.exists(Result.get_key(job.id)))
 
     def test_job_delete_execution_registry(self):
         """job.delete() also deletes ExecutionRegistry and all job executions"""

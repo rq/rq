@@ -6,7 +6,7 @@ from rq.cron import CronJob, CronScheduler, get_cron_job_history_key, get_cron_j
 from rq.defaults import DEFAULT_CRON_JOB_HISTORY_TTL
 from rq.utils import NOT_JSON_SERIALIZABLE
 from rq.webhook import Webhook
-from tests import RQTestCase
+from tests import RQTestCase, system_timezone
 from tests.fixtures import say_hello
 
 
@@ -288,27 +288,67 @@ class TestCronJob(RQTestCase):
         interval_job = CronJob(func=say_hello, queue_name=self.queue.name, interval=60)
         self.assertIsNone(interval_job.next_enqueue_time)  # Not set until first run
 
+    @system_timezone('Asia/Jakarta')
     def test_get_next_enqueue_time_with_cron_string(self):
-        """Test that get_next_enqueue_time correctly calculates next run time using cron expression"""
-        # Test daily at 9 AM
-        cron_expr = '0 9 * * *'
-        cron_job = CronJob(func=say_hello, queue_name=self.queue.name, cron=cron_expr)
+        """Cron fields match the system's local time (Asia/Jakarta is UTC+7)"""
+        # 00:00 UTC is 07:00 local, so 9 AM local is 02:00 UTC the same day
+        with patch('rq.cron.now', return_value=datetime(2023, 10, 27, 0, 0, tzinfo=timezone.utc)):
+            cron_job = CronJob(func=say_hello, queue_name=self.queue.name, cron='0 9 * * *')
+        self.assertEqual(cron_job.next_enqueue_time, datetime(2023, 10, 27, 2, 0, tzinfo=timezone.utc))
 
-        # Set a base time to 8 AM today
-        base_time = datetime(2023, 10, 27, 8, 0, 0)
-        cron_job.set_enqueue_time(base_time)
+        # 03:00 UTC is 10:00 local, past 9 AM, so the next run is tomorrow
+        cron_job.set_enqueue_time(datetime(2023, 10, 27, 3, 0, tzinfo=timezone.utc))
+        self.assertEqual(cron_job.next_enqueue_time, datetime(2023, 10, 28, 2, 0, tzinfo=timezone.utc))
 
-        next_enqueue_time = cron_job.get_next_enqueue_time()
-        expected_next_run = datetime(2023, 10, 27, 9, 0, 0)  # 9 AM same day
-        self.assertEqual(next_enqueue_time, expected_next_run)
+    @system_timezone('America/New_York')
+    def test_cron_string_fall_back(self):
+        """Ambiguous scheduled times use their first occurrence when clocks fall back"""
+        # Daily job keeps its local time across the change (07:00 EST is 12:00 UTC)
+        cron_job = CronJob(func=say_hello, queue_name=self.queue.name, cron='0 7 * * *')
+        cron_job.set_enqueue_time(datetime(2026, 10, 31, 11, 0, tzinfo=timezone.utc))
+        self.assertEqual(cron_job.next_enqueue_time, datetime(2026, 11, 1, 12, 0, tzinfo=timezone.utc))
 
-        # If we're already past 9 AM, should schedule for next day
-        base_time = datetime(2023, 10, 27, 10, 0, 0)
-        cron_job.set_enqueue_time(base_time)
+        # Hourly job isn't scheduled again for the repeated 01:00: 01:30 EDT → 02:00 EST
+        cron_job = CronJob(func=say_hello, queue_name=self.queue.name, cron='0 * * * *')
+        cron_job.set_enqueue_time(datetime(2026, 11, 1, 5, 30, tzinfo=timezone.utc))
+        self.assertEqual(cron_job.next_enqueue_time, datetime(2026, 11, 1, 7, 0, tzinfo=timezone.utc))
 
-        next_enqueue_time = cron_job.get_next_enqueue_time()
-        expected_next_run = datetime(2023, 10, 28, 9, 0, 0)  # 9 AM next day
-        self.assertEqual(next_enqueue_time, expected_next_run)
+        # 06:15 UTC is the second 01:15 (EST). The rest of the repeated hour was already
+        # scheduled during the first pass, so the next runs come after it
+        base_time = datetime(2026, 11, 1, 6, 15, tzinfo=timezone.utc)
+        with self.subTest('initialization'):
+            with patch('rq.cron.now', return_value=base_time):
+                every_minute_job = CronJob(func=say_hello, queue_name=self.queue.name, cron='* * * * *')
+                daily_job = CronJob(func=say_hello, queue_name=self.queue.name, cron='30 1 * * *')
+            self.assertEqual(every_minute_job.next_enqueue_time, datetime(2026, 11, 1, 7, 0, tzinfo=timezone.utc))
+            self.assertEqual(daily_job.next_enqueue_time, datetime(2026, 11, 2, 6, 30, tzinfo=timezone.utc))
+
+        with self.subTest('rescheduling'):
+            every_minute_job = CronJob(func=say_hello, queue_name=self.queue.name, cron='* * * * *')
+            every_minute_job.set_enqueue_time(base_time)
+            daily_job = CronJob(func=say_hello, queue_name=self.queue.name, cron='30 1 * * *')
+            daily_job.set_enqueue_time(base_time)
+            self.assertEqual(every_minute_job.next_enqueue_time, datetime(2026, 11, 1, 7, 0, tzinfo=timezone.utc))
+            self.assertEqual(daily_job.next_enqueue_time, datetime(2026, 11, 2, 6, 30, tzinfo=timezone.utc))
+
+    def test_cron_string_spring_forward(self):
+        """Runs in the skipped time move later by the size of the change when clocks spring forward"""
+        with system_timezone('America/New_York'):
+            # 02:30 doesn't exist on 2026-03-08, so it runs at 03:30 EDT (07:30 UTC)
+            cron_job = CronJob(func=say_hello, queue_name=self.queue.name, cron='30 2 * * *')
+            cron_job.set_enqueue_time(datetime(2026, 3, 7, 17, 0, tzinfo=timezone.utc))
+            self.assertEqual(cron_job.next_enqueue_time, datetime(2026, 3, 8, 7, 30, tzinfo=timezone.utc))
+
+        # Lord Howe clocks jump 30 minutes, from 02:00 to 02:30, on 2026-10-04
+        with system_timezone('Australia/Lord_Howe'):
+            cron_job = CronJob(func=say_hello, queue_name=self.queue.name, cron='15,30 2 * * *')
+            cron_job.set_enqueue_time(datetime(2026, 10, 3, 12, 0, tzinfo=timezone.utc))
+            # 02:15 is in the skipped time, so it runs at 02:45 (15:45 UTC)
+            self.assertEqual(cron_job.next_enqueue_time, datetime(2026, 10, 3, 15, 45, tzinfo=timezone.utc))
+
+            # 02:30 falls between 02:15 and its moved time 02:45, so it's skipped; next is 02:15 tomorrow
+            cron_job.set_enqueue_time(cron_job.next_enqueue_time)
+            self.assertEqual(cron_job.next_enqueue_time, datetime(2026, 10, 4, 15, 15, tzinfo=timezone.utc))
 
     def test_should_run_with_cron_string(self):
         """Test should_run method logic with cron expressions"""
@@ -325,23 +365,15 @@ class TestCronJob(RQTestCase):
         cron_job.next_enqueue_time = utils.now() - timedelta(minutes=5)
         self.assertTrue(cron_job.should_run())
 
+    @system_timezone('UTC')
     def test_cron_weekday_expressions(self):
         """Test cron expressions with specific weekday patterns"""
         # Monday to Friday at 9 AM
-        cron_expr = '0 9 * * 1-5'
-        cron_job = CronJob(func=say_hello, queue_name=self.queue.name, cron=cron_expr)
+        cron_job = CronJob(func=say_hello, queue_name=self.queue.name, cron='0 9 * * 1-5')
 
-        # Set to Friday 9 AM
-        friday_time = datetime(2023, 10, 27, 9, 0, 0)  # Assuming this is a Friday
-        cron_job.set_enqueue_time(friday_time)
-
-        next_enqueue_time = cron_job.get_next_enqueue_time()
-
-        # Next run should be Monday (skip weekend)
-        # We can verify it's not Saturday or Sunday by checking the weekday
-        self.assertIn(next_enqueue_time.weekday(), [0, 1, 2, 3, 4])  # Monday=0, Friday=4
-        self.assertEqual(next_enqueue_time.hour, 9)
-        self.assertEqual(next_enqueue_time.minute, 0)
+        # From Friday 9 AM, the next run skips the weekend to Monday 9 AM
+        cron_job.set_enqueue_time(datetime(2023, 10, 27, 9, 0, tzinfo=timezone.utc))
+        self.assertEqual(cron_job.next_enqueue_time, datetime(2023, 10, 30, 9, 0, tzinfo=timezone.utc))
 
     def test_cron_job_serialization_roundtrip(self):
         """Test CronJob serialization and deserialization with both interval and cron jobs"""

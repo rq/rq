@@ -1401,7 +1401,7 @@ class Job:
             registry.remove(self, pipeline=pipeline)
 
     def delete(self, pipeline: Pipeline | None = None, remove_from_queue: bool = True, delete_dependents: bool = False):
-        """Cancels the job and deletes the job hash from Redis. Jobs depending
+        """Cancels the job and deletes its hash and execution results from Redis. Jobs depending
         on this job can optionally be deleted as well.
 
         Args:
@@ -1409,6 +1409,8 @@ class Job:
             remove_from_queue (bool, optional): Whether the job should be removed from the queue. Defaults to True.
             delete_dependents (bool, optional): Whether job dependents should also be deleted. Defaults to False.
         """
+        from .results import Result
+
         connection = pipeline if pipeline is not None else self.connection
 
         self._remove_from_registries(pipeline=pipeline, remove_from_queue=remove_from_queue)
@@ -1425,7 +1427,7 @@ class Job:
             group = Group.fetch(self.group_id, self.connection)
             group.delete_job(self.id, pipeline=pipeline)
 
-        connection.delete(self.key, self.dependents_key, self.dependencies_key)
+        connection.delete(self.key, self.dependents_key, self.dependencies_key, Result.get_key(self.id))
 
         if self.has_rate_limit:
             from .rate_limit import RateLimitRegistry

@@ -1,6 +1,9 @@
 import logging
 import os
+import time
 import unittest
+from contextlib import contextmanager
+from unittest.mock import patch
 
 import pytest
 from redis import Redis
@@ -38,6 +41,17 @@ def min_redis_version(ver: tuple[int, ...]):
 def slow(f):
     f = pytest.mark.slow(f)
     return unittest.skipUnless(os.environ.get('RUN_SLOW_TESTS_TOO'), 'Slow tests disabled')(f)
+
+
+@contextmanager
+def system_timezone(name: str):
+    """Temporarily set the process's local timezone, e.g. `America/New_York`"""
+    try:
+        with patch.dict(os.environ, {'TZ': name}):
+            time.tzset()
+            yield
+    finally:
+        time.tzset()
 
 
 def ssl_test(f):
