@@ -1,0 +1,371 @@
+from __future__ import annotations
+
+import asyncio
+import signal
+import sys
+from datetime import datetime
+from typing import cast
+
+import redis.asyncio
+
+from ..connections import get_async_connection
+from ..defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT
+from ..executions import Execution
+from ..job import Job
+from ..queue import Queue
+from ..timeouts import JobTimeoutException, TimerDeathPenalty
+from ..utils import as_text, get_version, now
+from .base import BaseWorker, DequeueStrategy, WorkerStatus
+
+
+class AsyncWorker(BaseWorker):
+    """Proof-of-concept worker that runs coroutine jobs on an asyncio event loop."""
+
+    death_penalty_class = TimerDeathPenalty
+    heartbeat_batch_size = 100
+    _loop: asyncio.AbstractEventLoop  # set once work() starts the event loop
+
+    def __init__(self, *args, max_concurrency: int = 100, prepare_for_work: bool = True, **kwargs):
+        if max_concurrency < 1:
+            raise ValueError('max_concurrency must be at least 1')
+        super().__init__(*args, prepare_for_work=prepare_for_work, **kwargs)  # type: ignore[misc]  # *args never reaches prepare_for_work
+        # Hydration (find_by_key/all) passes prepare_for_work=False and no queues.
+        if prepare_for_work:
+            if sys.version_info < (3, 11):
+                raise RuntimeError('AsyncWorker requires Python >= 3.11')
+            if len(self.queues) != 1:
+                raise ValueError('AsyncWorker only supports a single queue')
+            if get_version(self.connection) < (6, 2, 0):
+                raise RuntimeError('AsyncWorker requires Redis server >= 6.2 (BLMOVE)')
+        self.max_concurrency = max_concurrency
+
+    @property
+    def queue(self) -> Queue:
+        return self.queues[0]
+
+    def work(
+        self,
+        burst: bool = False,
+        logging_level: str | None = None,
+        date_format: str = DEFAULT_LOGGING_DATE_FORMAT,
+        log_format: str = DEFAULT_LOGGING_FORMAT,
+        max_jobs: int | None = None,
+        max_idle_time: int | None = None,
+        with_scheduler: bool = False,
+        dequeue_strategy: DequeueStrategy = DequeueStrategy.DEFAULT,
+    ) -> bool:
+        """Admits jobs onto the event loop until interrupted (or the queue is
+        empty, in burst mode). Returns whether any job was admitted (a
+        cold-cancelled job counts: it was admitted, not processed).
+
+        Shutdown: the first SIGINT/SIGTERM stops admission and drains in-flight
+        executions; a second signal cancels them. The blocking dequeue is a
+        native `redis.asyncio` BLMOVE awaited on the event loop, so a shutdown
+        signal interrupts an idle worker immediately. Unlike the sync `Worker`,
+        cold shutdown returns cleanly instead of raising `SystemExit`, and
+        cold-cancelled executions are not finalized — their jobs stay STARTED
+        in `StartedJobRegistry`.
+        """
+        if with_scheduler:
+            raise NotImplementedError('AsyncWorker does not support with_scheduler')
+        if max_idle_time is not None:
+            raise NotImplementedError('AsyncWorker does not support max_idle_time')
+        if dequeue_strategy != DequeueStrategy.DEFAULT:
+            raise NotImplementedError('AsyncWorker only supports the default dequeue strategy')
+
+        self.bootstrap(logging_level, date_format, log_format)
+        try:
+            admitted_any = asyncio.run(self._admission_loop(burst, max_jobs))
+        finally:
+            self.teardown()
+        return admitted_any
+
+    async def _admission_loop(self, burst: bool, max_jobs: int | None) -> bool:
+        """Dequeues jobs and admits each as a task on the event loop, never
+        holding more than `max_concurrency` executions in flight.
+        """
+        # Retain completed tasks until admission consumes them, so an empty
+        # dequeue cannot hide retries enqueued while that dequeue was pending.
+        execution_tasks: set[asyncio.Task] = set()
+        shutdown_event = asyncio.Event()
+        cold_shutdown_requested = False
+        admitted_jobs = 0
+
+        def on_task_done(task: asyncio.Task):
+            if not task.cancelled() and task.exception():
+                self.log.error('Worker %s: execution task failed', self.name, exc_info=task.exception())
+
+        def request_shutdown():
+            nonlocal cold_shutdown_requested
+            if shutdown_event.is_set():
+                self.log.warning(
+                    'Worker %s: cold shutdown, cancelling %d in-flight executions',
+                    self.name,
+                    sum(not task.done() for task in execution_tasks),
+                )
+                cold_shutdown_requested = True
+                # Cancellation only interrupts the simulated asyncio.sleep; a task
+                # parked on to_thread() keeps its thread running to completion.
+                for task in execution_tasks:
+                    task.cancel()
+            else:
+                self.handle_warm_shutdown_request()
+                self.log.info('Worker %s: send signal again to force quit', self.name)
+                shutdown_event.set()
+
+        loop = asyncio.get_running_loop()
+        self._loop = loop
+        for shutdown_signal in (signal.SIGINT, signal.SIGTERM):
+            try:
+                loop.add_signal_handler(shutdown_signal, request_shutdown)
+            except (ValueError, RuntimeError, NotImplementedError):
+                break  # work() off the main thread or unsupported platform: signals keep default behavior
+
+        async_connection = get_async_connection(self.connection)
+        heartbeat_task = asyncio.create_task(self._heartbeat_loop())
+        stop_wait_task = asyncio.create_task(shutdown_event.wait())
+        try:
+            while not shutdown_event.is_set():
+                if len(execution_tasks) >= self.max_concurrency:
+                    done, _ = await asyncio.wait(execution_tasks, return_when=asyncio.FIRST_COMPLETED)
+                    execution_tasks.difference_update(done)
+                    continue
+
+                pop_task = asyncio.create_task(self._pop_job_id(burst, async_connection))
+                await asyncio.wait({pop_task, stop_wait_task}, return_when=asyncio.FIRST_COMPLETED)
+                if not pop_task.done():
+                    # Shutdown while blocked on the dequeue: no job is held yet,
+                    # cancelling is safe (see _pop_job_id for the residual race).
+                    pop_task.cancel()
+                    await asyncio.gather(pop_task, return_exceptions=True)
+                    break
+
+                job_id = pop_task.result()
+                if job_id is None:  # burst mode: queue empty
+                    if not execution_tasks:
+                        self.log.info('Worker %s: done, quitting', self.name)
+                        break
+                    # A task finishing during the pop may have enqueued a retry or dependent
+                    done, _ = await asyncio.wait(execution_tasks, return_when=asyncio.FIRST_COMPLETED)
+                    execution_tasks.difference_update(done)
+                    continue
+
+                # The job is already in the intermediate queue: admit it even if
+                # shutdown was requested mid-dequeue, dropping it here would
+                # strand it.
+                job_fetch_result = await asyncio.to_thread(
+                    self.queue_class._fetch_dequeued_job,
+                    self.connection,
+                    self.queue.key,
+                    job_id,
+                    self.job_class,
+                    self.serializer,
+                    self.death_penalty_class,
+                )
+                if job_fetch_result is None:
+                    continue  # job hash vanished, dequeue again
+
+                job, queue = job_fetch_result
+                self.log.debug('Worker %s: dequeued job %s from %s', self.name, job.id, queue.name)
+                # Retried jobs keep the last attempt's started_at; heartbeats may run before _start_execution
+                job.started_at = None
+                execution = await asyncio.to_thread(self.prepare_execution, job)
+                task = asyncio.create_task(self._run_execution(job, queue, execution))
+                execution_tasks.add(task)
+                task.add_done_callback(on_task_done)
+                if cold_shutdown_requested:
+                    # A second signal landed between the pop and this registration,
+                    # so request_shutdown's cancel sweep missed this task.
+                    task.cancel()
+                self.log.debug(
+                    'Worker %s: admitted job %s (execution %s), %d in flight',
+                    self.name,
+                    job.id,
+                    execution.id,
+                    len(self.executions),
+                )
+
+                admitted_jobs += 1
+                if max_jobs is not None and admitted_jobs >= max_jobs:
+                    self.log.info('Worker %s: admitted %d jobs, quitting', self.name, admitted_jobs)
+                    break
+        finally:
+            # Drain in-flight executions first (also when an admission-path
+            # exception lands here), or collect their cancellations on cold
+            # shutdown; failures are already logged by on_task_done. The
+            # heartbeat is cancelled only after the drain: a worker draining
+            # long executions must keep heartbeating or it looks dead.
+            if execution_tasks:
+                self.log.info(
+                    'Worker %s: waiting for %d in-flight executions',
+                    self.name,
+                    sum(not task.done() for task in execution_tasks),
+                )
+                await asyncio.gather(*execution_tasks, return_exceptions=True)
+            heartbeat_task.cancel()
+            stop_wait_task.cancel()
+            await asyncio.gather(heartbeat_task, stop_wait_task, return_exceptions=True)
+            await async_connection.aclose()  # type: ignore[attr-defined]  # types-redis stubs predate aclose
+        return admitted_jobs > 0
+
+    def request_stop_execution(self, execution_id: str):
+        """Called from the pubsub thread: the stop is applied on the event loop thread.
+
+        An execution whose job task already finished is left alone, its finalization
+        may be underway. One without a task yet is marked so `_run_execution` cancels
+        the task as soon as it creates it.
+        """
+
+        def stop_execution():
+            execution = self.executions.get(execution_id)
+            if not execution or (execution._job_task and execution._job_task.done()):
+                self.log.warning('Not running execution %s, command ignored.', execution_id)
+                return
+            self._stopped_execution_ids.add(execution_id)
+            if execution._job_task:
+                execution._job_task.cancel()
+
+        self._loop.call_soon_threadsafe(stop_execution)
+
+    async def _pop_job_id(self, burst: bool, async_connection: redis.asyncio.Redis) -> str | None:
+        """Pops the next job id into the intermediate queue, blocking on the
+        event loop (cancellable). Once this returns an id, the job is in the
+        intermediate queue and must be admitted — never cancel past this point.
+
+        If a cancel lands in the instant between the server completing the
+        BLMOVE and the reply arriving, the job id parks in the intermediate
+        queue, where maintenance cleanup eventually fails the job as stuck
+        (it is not requeued).
+        """
+        queue_key = self.queue.key
+        intermediate_key = self.queue.intermediate_queue_key
+        while True:
+            try:
+                job_id = cast(
+                    'bytes | str | None',
+                    await (
+                        async_connection.lmove(queue_key, intermediate_key)
+                        if burst
+                        else async_connection.blmove(queue_key, intermediate_key, self.dequeue_timeout)
+                    ),
+                )
+            except asyncio.CancelledError:
+                # A cancelled command may leave an unread reply on the socket.
+                await async_connection.connection_pool.disconnect()
+                raise
+            if job_id is not None:
+                return as_text(job_id)
+            if burst:
+                return None  # queue empty
+            # Timeout: re-block. Heartbeats run on their own task and a
+            # shutdown signal cancels this await directly.
+
+    async def _heartbeat_loop(self):
+        """Periodically heartbeats the worker and keeps its state accurate."""
+        while True:
+            try:
+                await asyncio.to_thread(self._heartbeat_tick)
+            except Exception:
+                self.log.exception('Worker %s: heartbeat failed', self.name)
+            await asyncio.sleep(self.job_monitoring_interval)
+
+    def _heartbeat_tick(self):
+        """Heartbeats the worker and every in-flight execution: without the
+        `maintain_heartbeats` refresh, an execution outliving its initial TTL
+        (~job_monitoring_interval + 60) would expire out of StartedJobRegistry
+        and be failed as abandoned while still running.
+        """
+        executions = list(self.executions.values())
+        if not executions:
+            with self.connection.pipeline() as pipeline:
+                self.set_state(WorkerStatus.IDLE, pipeline=pipeline)
+                self.heartbeat(pipeline=pipeline)
+                pipeline.execute()
+        else:
+            tick_now = now()
+            with self.connection.pipeline() as pipeline:
+                # A tick racing an admission can land a stale IDLE write, so
+                # every busy tick converges the worker state back to the truth.
+                # The state write may recreate the worker hash, but the following
+                # last_heartbeat HSET still returns 1 when that field was missing.
+                self.set_state(WorkerStatus.BUSY, pipeline=pipeline)
+                worker_heartbeat_index = len(pipeline)
+                self.heartbeat(self.job_monitoring_interval + 60, pipeline=pipeline)
+                results = pipeline.execute()
+                if results[worker_heartbeat_index] == 1:
+                    pipeline.hset(self.key, mapping=self.serialize())
+                    pipeline.execute()
+
+            execution_batches = [
+                executions[offset : offset + self.heartbeat_batch_size]
+                for offset in range(0, len(executions), self.heartbeat_batch_size)
+            ]
+            for execution_batch in execution_batches:
+                self._heartbeat_executions(execution_batch, tick_now)
+
+        if self.should_run_maintenance_tasks:
+            self.run_maintenance_tasks()
+
+    def _heartbeat_executions(self, executions: list[Execution], tick_now: datetime) -> None:
+        """Heartbeat one bounded batch and remove job and execution hashes recreated by the writes."""
+        with self.connection.pipeline() as pipeline:
+            heartbeat_indices = []
+            for execution in executions:
+                job = execution.job
+                working_time = (tick_now - job.started_at).total_seconds() if job.started_at else 0.0
+                ttl = int(self.get_heartbeat_ttl(job, working_time=working_time))
+                heartbeat_indices.append((len(pipeline), execution.key))
+                execution.heartbeat(job.started_job_registry, ttl, pipeline=pipeline)
+                heartbeat_indices.append((len(pipeline), job.key))
+                job.heartbeat(tick_now, ttl, pipeline=pipeline, xx=True)
+
+            results = pipeline.execute()
+            # A heartbeat racing finalization can recreate a deleted job hash
+            # (result_ttl=0) or execution hash containing only last_heartbeat;
+            # HSET returns 1 for the newly created field, so remove those hashes again.
+            recreated_keys = {key for index, key in heartbeat_indices if results[index] == 1}
+            if recreated_keys:
+                for key in sorted(recreated_keys):
+                    pipeline.delete(key)
+                pipeline.execute()
+
+    async def _run_execution(self, job: Job, queue: Queue, execution: Execution):
+        try:
+            await asyncio.to_thread(self._start_execution, job, execution)
+            timeout = None if job.timeout == -1 else job.timeout or self.queue_class.DEFAULT_TIMEOUT
+            timeout_context = asyncio.timeout(timeout)
+            # The job runs as its own task so a stop command can cancel the job
+            # without cancelling this task, which only a cold shutdown does.
+            execution._job_task = asyncio.create_task(job.perform_async())
+            if execution.id in self._stopped_execution_ids:
+                execution._job_task.cancel()  # stop requested before the job started
+            try:
+                async with timeout_context:
+                    result = await execution._job_task
+            except TimeoutError as error:
+                if timeout_context.expired():
+                    raise JobTimeoutException(f'Task exceeded maximum timeout value ({timeout} seconds)') from error
+                raise
+            except asyncio.CancelledError:
+                if execution.id not in self._stopped_execution_ids:
+                    raise  # cold shutdown
+            except Exception:
+                if execution.id not in self._stopped_execution_ids:
+                    raise  # a regular failure
+            # A stopped job is finalized as stopped however it reacted to the
+            # cancellation: escaping, swallowing it or raising from its cleanup.
+            if execution.id in self._stopped_execution_ids:
+                await asyncio.to_thread(self._finalize_stopped, job, queue, execution)
+                return
+            await asyncio.to_thread(self._finalize_success, job, queue, execution, result)
+        except Exception:
+            exc_info = sys.exc_info()
+            await asyncio.to_thread(self._finalize_failure, job, queue, execution, exc_info)
+
+    def _start_execution(self, job: Job, execution: Execution):
+        self.prepare_job_execution(job, remove_from_intermediate_queue=True)
+        job.started_at = now()
+
+    def _finalize_stopped(self, job: Job, queue: Queue, execution: Execution):
+        self.handle_execution_ended(job, queue, job.stopped_callback_timeout)
+        self._handle_stopped_job(job, queue, execution)
