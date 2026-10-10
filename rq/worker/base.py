@@ -26,8 +26,6 @@ if TYPE_CHECKING:
     from redis import Redis
     from redis.client import Pipeline, PubSub, PubSubWorkerThread
 
-from contextlib import suppress
-
 import redis.exceptions
 
 from .. import worker_registration
@@ -760,8 +758,6 @@ class BaseWorker:
                     execution_started_at=execution_started_at,
                     execution_ended_at=execution_ended_at,
                 )
-                with suppress(redis.exceptions.ConnectionError):
-                    pipeline.execute()
 
             self.increment_failed_job_count(pipeline)
             if job.started_at and job.ended_at:
@@ -776,7 +772,7 @@ class BaseWorker:
             try:
                 pipeline.execute()
             except Exception:
-                # Log instead of raising if Redis is down; the failure isn't persisted, so skip post-commit steps.
+                # Log instead of raising; the failure may not be persisted, so skip follow-up actions.
                 self.log.exception('Worker %s: failed to persist failure of job %s', self.name, job.id)
             else:
                 # Send webhooks once the failure is persisted. send_webhooks never raises.
