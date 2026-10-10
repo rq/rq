@@ -775,22 +775,30 @@ class BaseWorker:
 
             try:
                 pipeline.execute()
-                # Send webhooks once the failure is persisted, and before enqueue_dependents
-                # so an exception there can't skip them. send_webhooks never raises.
+            except Exception:
+                # Log instead of raising if Redis is down; the failure isn't persisted, so skip post-commit steps.
+                self.log.exception('Worker %s: failed to persist failure of job %s', self.name, job.id)
+            else:
+                # Send webhooks once the failure is persisted. send_webhooks never raises.
                 if not retry and not job_is_stopped:
                     job.send_webhooks(JobStatus.FAILED, exc_string=exc_string)
-                # Release before enqueue_dependents so an exception there can't leak the slot.
-                release_slot(job)
                 if should_enqueue_dependents:
-                    queue.enqueue_dependents(job)
-            except Exception as e:
-                # Log instead of raising if Redis is down or enqueueing dependents fails.
-                self.log.error(
-                    'Worker %s: exception during pipeline execute or enqueue_dependents for job %s: %s',
-                    self.name,
-                    job.id,
-                    e,
-                )
+                    self._enqueue_dependents_safely(queue, job)
+                self._release_slot_safely(job)
+
+    def _enqueue_dependents_safely(self, queue: Queue, job: Job) -> None:
+        """Enqueue dependents after the failure commits, logging errors so slot release still runs."""
+        try:
+            queue.enqueue_dependents(job)
+        except Exception:
+            self.log.exception('Worker %s: failed to enqueue dependents of job %s', self.name, job.id)
+
+    def _release_slot_safely(self, job: Job) -> None:
+        """Release the job's rate limit slot, logging errors; maintenance frees any leaked slot."""
+        try:
+            release_slot(job)
+        except Exception:
+            self.log.exception('Worker %s: failed to release rate limit slot of job %s', self.name, job.id)
 
     def get_current_job_id(self) -> str | None:
         """Job id of one of this worker's active executions, `None` when idle.
@@ -1428,19 +1436,13 @@ class BaseWorker:
 
                 try:
                     pipeline.execute()
-                    # Send webhooks before enqueue_dependents so an exception there can't skip them.
-                    # No exception was raised, so exc_string is empty.
+                except Exception:
+                    self.log.exception('Worker %s: failed to persist failure of job %s', self.name, job.id)
+                else:
+                    # The job returned Retry, so there is no exception traceback.
                     job.send_webhooks(JobStatus.FAILED, exc_string='')
-                    # Release before enqueue_dependents so an exception there can't leak the slot.
-                    release_slot(job)
-                    queue.enqueue_dependents(job)
-                except Exception as e:
-                    self.log.error(
-                        'Worker %s: exception during pipeline execute or enqueue_dependents for job %s: %s',
-                        self.name,
-                        job.id,
-                        e,
-                    )
+                    self._enqueue_dependents_safely(queue, job)
+                    self._release_slot_safely(job)
             return
 
         with self.connection.pipeline() as pipeline:
