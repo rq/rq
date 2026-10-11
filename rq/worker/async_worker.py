@@ -260,38 +260,25 @@ class AsyncWorker(BaseWorker):
             await asyncio.sleep(self.job_monitoring_interval)
 
     def _heartbeat_tick(self):
-        """Heartbeats the worker and every in-flight execution: without the
-        `maintain_heartbeats` refresh, an execution outliving its initial TTL
-        (~job_monitoring_interval + 60) would expire out of StartedJobRegistry
-        and be failed as abandoned while still running.
-        """
+        """Heartbeats the worker and its in-flight executions so long-running executions are not reaped as abandoned."""
         executions = list(self.executions.values())
-        if not executions:
-            with self.connection.pipeline() as pipeline:
-                self.set_state(WorkerStatus.IDLE, pipeline=pipeline)
-                self.heartbeat(pipeline=pipeline)
+        state = WorkerStatus.BUSY if executions else WorkerStatus.IDLE
+        heartbeat_ttl = self.job_monitoring_interval + 60 if executions else None
+        tick_now = now()
+        with self.connection.pipeline() as pipeline:
+            # Rewrite state each tick to correct stale writes from admission races.
+            # The state write may recreate the worker hash, but the following
+            # last_heartbeat HSET still returns 1 when that field was missing.
+            self.set_state(state, pipeline=pipeline)
+            worker_heartbeat_index = len(pipeline)
+            self.heartbeat(heartbeat_ttl, pipeline=pipeline)
+            results = pipeline.execute()
+            if results[worker_heartbeat_index] == 1:
+                pipeline.hset(self.key, mapping=self.serialize())
                 pipeline.execute()
-        else:
-            tick_now = now()
-            with self.connection.pipeline() as pipeline:
-                # A tick racing an admission can land a stale IDLE write, so
-                # every busy tick converges the worker state back to the truth.
-                # The state write may recreate the worker hash, but the following
-                # last_heartbeat HSET still returns 1 when that field was missing.
-                self.set_state(WorkerStatus.BUSY, pipeline=pipeline)
-                worker_heartbeat_index = len(pipeline)
-                self.heartbeat(self.job_monitoring_interval + 60, pipeline=pipeline)
-                results = pipeline.execute()
-                if results[worker_heartbeat_index] == 1:
-                    pipeline.hset(self.key, mapping=self.serialize())
-                    pipeline.execute()
 
-            execution_batches = [
-                executions[offset : offset + self.heartbeat_batch_size]
-                for offset in range(0, len(executions), self.heartbeat_batch_size)
-            ]
-            for execution_batch in execution_batches:
-                self._heartbeat_executions(execution_batch, tick_now)
+        for offset in range(0, len(executions), self.heartbeat_batch_size):
+            self._heartbeat_executions(executions[offset : offset + self.heartbeat_batch_size], tick_now)
 
         if self.should_run_maintenance_tasks:
             self.run_maintenance_tasks()
@@ -299,24 +286,23 @@ class AsyncWorker(BaseWorker):
     def _heartbeat_executions(self, executions: list[Execution], tick_now: datetime) -> None:
         """Heartbeat one bounded batch and remove job and execution hashes recreated by the writes."""
         with self.connection.pipeline() as pipeline:
-            heartbeat_indices = []
+            heartbeat_checks = []
             for execution in executions:
                 job = execution.job
                 working_time = (tick_now - job.started_at).total_seconds() if job.started_at else 0.0
                 ttl = int(self.get_heartbeat_ttl(job, working_time=working_time))
-                heartbeat_indices.append((len(pipeline), execution.key))
+                heartbeat_checks.append((len(pipeline), execution.key))
                 execution.heartbeat(job.started_job_registry, ttl, pipeline=pipeline)
-                heartbeat_indices.append((len(pipeline), job.key))
-                job.heartbeat(tick_now, ttl, pipeline=pipeline, xx=True)
+                heartbeat_checks.append((len(pipeline), job.key))
+                job.heartbeat(tick_now, ttl, pipeline=pipeline)
 
             results = pipeline.execute()
             # A heartbeat racing finalization can recreate a deleted job hash
             # (result_ttl=0) or execution hash containing only last_heartbeat;
             # HSET returns 1 for the newly created field, so remove those hashes again.
-            recreated_keys = {key for index, key in heartbeat_indices if results[index] == 1}
+            recreated_keys = [key for index, key in heartbeat_checks if results[index] == 1]
             if recreated_keys:
-                for key in sorted(recreated_keys):
-                    pipeline.delete(key)
+                pipeline.delete(*recreated_keys)
                 pipeline.execute()
 
     async def _run_execution(self, job: Job, queue: Queue, execution: Execution):

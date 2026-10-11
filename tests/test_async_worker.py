@@ -353,18 +353,30 @@ class TestAsyncWorker(RQTestCase):
 
     def test_heartbeat_tick_restores_worker_hash(self):
         """A tick that recreates a deleted worker hash writes its full state back."""
-        job = self.queue.enqueue(say_hello)
-        worker = AsyncWorker([self.queue], connection=self.connection)
-        worker.register_birth()
-        worker.prepare_execution(job)
-        worker.prepare_job_execution(job)
-        worker.last_cleaned_at = now()
-        self.connection.delete(worker.key)
+        with self.subTest('busy'):
+            job = self.queue.enqueue(say_hello)
+            worker = AsyncWorker([self.queue], connection=self.connection)
+            worker.register_birth()
+            worker.prepare_execution(job)
+            worker.prepare_job_execution(job)
+            worker.last_cleaned_at = now()
+            self.connection.delete(worker.key)
 
-        worker._heartbeat_tick()
+            worker._heartbeat_tick()
 
-        self.assertEqual(self.connection.hget(worker.key, 'queues'), self.queue.name.encode())
-        worker.register_death()
+            self.assertEqual(self.connection.hget(worker.key, 'queues'), self.queue.name.encode())
+            worker.register_death()
+
+        with self.subTest('idle'):
+            worker = AsyncWorker([self.queue], connection=self.connection)
+            worker.register_birth()
+            worker.last_cleaned_at = now()
+            self.connection.delete(worker.key)
+
+            worker._heartbeat_tick()
+
+            self.assertEqual(self.connection.hget(worker.key, 'queues'), self.queue.name.encode())
+            worker.register_death()
 
     def test_heartbeat_tick_removes_recreated_keys(self):
         """A tick racing finalization must not resurrect deleted job or execution hashes."""
