@@ -1,5 +1,9 @@
+import asyncio
+from unittest.mock import AsyncMock, patch
+
 import redis.asyncio
 from redis import ConnectionPool, Redis, SSLConnection, UnixDomainSocketConnection
+from redis.sentinel import Sentinel
 
 from rq.connections import get_async_connection, parse_connection
 from tests import RQTestCase
@@ -35,3 +39,13 @@ class TestConnectionInheritance(RQTestCase):
         async_connection = get_async_connection(Redis(unix_socket_path='/tmp/rq-test.sock'))
         self.assertIs(async_connection.connection_pool.connection_class, redis.asyncio.UnixDomainSocketConnection)
         self.assertEqual(async_connection.connection_pool.connection_kwargs['path'], '/tmp/rq-test.sock')
+
+        with self.subTest('unsupported connection class'):
+            with self.assertRaises(NotImplementedError):
+                get_async_connection(Sentinel([('localhost', 26379)]).master_for('mymaster'))
+
+        with self.subTest('closing the client disconnects its pool'):
+            async_connection = get_async_connection(self.connection)
+            with patch.object(async_connection.connection_pool, 'disconnect', new_callable=AsyncMock) as disconnect:
+                asyncio.run(async_connection.aclose())
+            disconnect.assert_awaited_once()

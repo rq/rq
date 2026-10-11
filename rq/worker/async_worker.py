@@ -227,31 +227,22 @@ class AsyncWorker(BaseWorker):
         self._loop.call_soon_threadsafe(stop_execution)
 
     async def _pop_job_id(self, burst: bool, async_connection: redis.asyncio.Redis) -> str | None:
-        """Pops the next job id into the intermediate queue, blocking on the
-        event loop (cancellable). Once this returns an id, the job is in the
-        intermediate queue and must be admitted — never cancel past this point.
-
-        If a cancel lands in the instant between the server completing the
-        BLMOVE and the reply arriving, the job id parks in the intermediate
-        queue, where maintenance cleanup eventually fails the job as stuck
-        (it is not requeued).
+        """Waits for the next job id without blocking the event-loop thread. Once it
+        returns an id the job is in the intermediate queue and must be admitted.
+        Cancellation after Redis moves a job but before the reply arrives can leave
+        its ID in the intermediate queue for maintenance cleanup.
         """
         queue_key = self.queue.key
         intermediate_key = self.queue.intermediate_queue_key
         while True:
-            try:
-                job_id = cast(
-                    'bytes | str | None',
-                    await (
-                        async_connection.lmove(queue_key, intermediate_key)
-                        if burst
-                        else async_connection.blmove(queue_key, intermediate_key, self.dequeue_timeout)
-                    ),
-                )
-            except asyncio.CancelledError:
-                # A cancelled command may leave an unread reply on the socket.
-                await async_connection.connection_pool.disconnect()
-                raise
+            job_id = cast(
+                'bytes | str | None',
+                await (
+                    async_connection.lmove(queue_key, intermediate_key)
+                    if burst
+                    else async_connection.blmove(queue_key, intermediate_key, self.dequeue_timeout)
+                ),
+            )
             if job_id is not None:
                 return as_text(job_id)
             if burst:
