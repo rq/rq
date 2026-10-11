@@ -126,7 +126,7 @@ class TestAsyncWorker(RQTestCase):
         self.assertEqual(async_callable_job.get_status(), JobStatus.FINISHED)
         self.assertEqual(async_callable_job.latest_result().return_value, 'called asynchronously')
         self.assertEqual(sync_callable_job.get_status(), JobStatus.FAILED)
-        self.assertIn('AsyncWorker only supports async functions', sync_callable_job.latest_result().exc_string)
+        self.assertIn('Job function must be async', sync_callable_job.latest_result().exc_string)
 
     def test_finalization_hooks(self):
         """Success and failure finalization run the job's callbacks and webhooks."""

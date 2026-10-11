@@ -19,7 +19,7 @@ from .base import BaseWorker, DequeueStrategy, WorkerStatus
 
 
 class AsyncWorker(BaseWorker):
-    """Proof-of-concept worker that runs coroutine jobs on an asyncio event loop."""
+    """Worker that runs coroutine jobs concurrently on one asyncio event loop."""
 
     death_penalty_class = TimerDeathPenalty
     heartbeat_batch_size = 100
@@ -104,8 +104,7 @@ class AsyncWorker(BaseWorker):
                     sum(not task.done() for task in execution_tasks),
                 )
                 cold_shutdown_requested = True
-                # Cancellation only interrupts the simulated asyncio.sleep; a task
-                # parked on to_thread() keeps its thread running to completion.
+                # Cancelling a task does not stop work already running in a thread.
                 for task in execution_tasks:
                     task.cancel()
             else:
@@ -331,7 +330,7 @@ class AsyncWorker(BaseWorker):
 
     async def _run_execution(self, job: Job, queue: Queue, execution: Execution):
         try:
-            await asyncio.to_thread(self._start_execution, job, execution)
+            await asyncio.to_thread(self._start_execution, job)
             timeout = None if job.timeout == -1 else job.timeout or self.queue_class.DEFAULT_TIMEOUT
             timeout_context = asyncio.timeout(timeout)
             # The job runs as its own task so a stop command can cancel the job
@@ -362,7 +361,7 @@ class AsyncWorker(BaseWorker):
             exc_info = sys.exc_info()
             await asyncio.to_thread(self._finalize_failure, job, queue, execution, exc_info)
 
-    def _start_execution(self, job: Job, execution: Execution):
+    def _start_execution(self, job: Job):
         self.prepare_job_execution(job, remove_from_intermediate_queue=True)
         job.started_at = now()
 

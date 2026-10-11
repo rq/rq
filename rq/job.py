@@ -1474,9 +1474,10 @@ class Job:
         """Performs a coroutine job on the running event loop."""
         token = _current_job.set(self)
         try:
-            if not inspect.iscoroutinefunction(self.func):
-                raise TypeError('AsyncWorker only supports async functions')
-            self._result = await self.func(*self.args, **self.kwargs)
+            func = self.func
+            if not inspect.iscoroutinefunction(func):
+                raise TypeError('Job function must be async')
+            self._result = await func(*self.args, **self.kwargs)
         finally:
             assert _current_job.get() is self
             _current_job.reset(token)
