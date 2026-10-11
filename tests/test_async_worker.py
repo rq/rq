@@ -1,5 +1,6 @@
 import asyncio
 import os
+import signal
 import sys
 import threading
 import time
@@ -28,8 +29,10 @@ from tests.fixtures import (
     fail_async_while_retries_remain,
     kill_worker,
     raise_async,
+    raise_cancelled_async,
     raise_on_cancel_async,
     raise_timeout_async,
+    raise_timeout_on_cancel_async,
     return_on_cancel_async,
     return_retry_async,
     save_exception,
@@ -166,26 +169,36 @@ class TestAsyncWorker(RQTestCase):
         self.assertEqual(failure_job.get_status(), JobStatus.FAILED)
         self.assertIn('Coroutine failure callbacks are not supported', failure_job.latest_result().exc_string)
 
-    def test_timeout_fails_one_job_without_interrupting_sibling(self):
-        """Only expiration by asyncio.timeout is converted to JobTimeoutException.
-
-        A TimeoutError raised by job code is a regular job failure, while an
-        unrelated sibling continues running in either case.
-        """
+    def test_timeout_and_cancellation_errors_are_classified(self):
+        """Only expiration by asyncio.timeout becomes JobTimeoutException, even if
+        the job swallows the cancellation. A job raising TimeoutError or
+        CancelledError itself fails normally, and a sibling is unaffected."""
         timed_out_job = self.queue.enqueue(sleep_async, 2, job_timeout=1)
-        sibling_job = self.queue.enqueue(say_hello_async)
+        swallowing_job = self.queue.enqueue(return_on_cancel_async, 5, job_timeout=1)
         timeout_error_job = self.queue.enqueue(raise_timeout_async)
+        cancelled_error_job = self.queue.enqueue(raise_cancelled_async)
+        sibling_job = self.queue.enqueue(sleep_async, 2)
 
-        worker = AsyncWorker([self.queue], connection=self.connection, max_concurrency=2)
+        worker = AsyncWorker([self.queue], connection=self.connection, max_concurrency=5)
         worker.work(burst=True)
 
-        self.assertEqual(timed_out_job.get_status(), JobStatus.FAILED)
-        self.assertIn('JobTimeoutException', timed_out_job.latest_result().exc_string)
-        self.assertEqual(sibling_job.get_status(), JobStatus.FINISHED)
-        # This job raised TimeoutError itself; the worker timeout did not expire.
-        exc_string = timeout_error_job.latest_result().exc_string
-        self.assertIn('TimeoutError: job timeout error', exc_string)
-        self.assertNotIn('JobTimeoutException', exc_string)
+        with self.subTest('timed out'):
+            self.assertEqual(timed_out_job.get_status(), JobStatus.FAILED)
+            self.assertIn('JobTimeoutException', timed_out_job.latest_result().exc_string)
+        with self.subTest('swallows timeout cancellation'):
+            self.assertEqual(swallowing_job.get_status(), JobStatus.FAILED)
+            self.assertIn('JobTimeoutException', swallowing_job.latest_result().exc_string)
+        with self.subTest('raises TimeoutError'):
+            exc_string = timeout_error_job.latest_result().exc_string
+            self.assertIn('TimeoutError: job timeout error', exc_string)
+            self.assertNotIn('JobTimeoutException', exc_string)
+        with self.subTest('raises CancelledError'):
+            self.assertEqual(cancelled_error_job.get_status(), JobStatus.FAILED)
+            self.assertIn(
+                'RuntimeError: Job was cancelled by its own code', cancelled_error_job.latest_result().exc_string
+            )
+        with self.subTest('sibling'):
+            self.assertEqual(sibling_job.get_status(), JobStatus.FINISHED)
         self.assertEqual(worker.executions, {})
 
     def test_returned_retry(self):
@@ -449,7 +462,7 @@ class TestAsyncWorker(RQTestCase):
 
     def test_stop_finalizes_as_stopped_however_job_reacts(self):
         """A stopped job is finalized as stopped whether it swallows the
-        cancellation or raises from its cancellation handler."""
+        cancellation or raises from its cancellation handler, TimeoutError included."""
         swallowing_job = self.queue.enqueue(
             return_on_cancel_async,
             5,
@@ -462,13 +475,21 @@ class TestAsyncWorker(RQTestCase):
             on_stopped=Callback(save_result_if_not_stopped),
             on_failure=Callback(save_exception),
         )
-        worker = AsyncWorker([self.queue], connection=self.connection, max_concurrency=2)
+        timeout_raising_job = self.queue.enqueue(
+            raise_timeout_on_cancel_async,
+            5,
+            on_stopped=Callback(save_result_if_not_stopped),
+            on_failure=Callback(save_exception),
+        )
+        worker = AsyncWorker([self.queue], connection=self.connection, max_concurrency=3)
 
         def send_stops():
             self._wait_until_entered(swallowing_job)
             self._wait_until_entered(raising_job)
+            self._wait_until_entered(timeout_raising_job)
             send_stop_job_command(self.connection, swallowing_job.id)
             send_stop_job_command(self.connection, raising_job.id)
+            send_stop_job_command(self.connection, timeout_raising_job.id)
 
         self._work_while_executing(worker, send_stops)
 
@@ -480,6 +501,10 @@ class TestAsyncWorker(RQTestCase):
             self.assertEqual(raising_job.get_status(), JobStatus.STOPPED)
             self.assertTrue(self.connection.exists(f'stopped_callback:{raising_job.id}'))
             self.assertFalse(self.connection.exists(f'failure_callback:{raising_job.id}'))
+        with self.subTest('raises TimeoutError during cancellation'):
+            self.assertEqual(timeout_raising_job.get_status(), JobStatus.STOPPED)
+            self.assertTrue(self.connection.exists(f'stopped_callback:{timeout_raising_job.id}'))
+            self.assertFalse(self.connection.exists(f'failure_callback:{timeout_raising_job.id}'))
 
     def test_hydration_via_all_and_find_by_key(self):
         """Worker discovery constructs AsyncWorker with no queues."""
@@ -505,20 +530,20 @@ class TestAsyncWorker(RQTestCase):
         self.assertEqual(worker.executions, {})
 
     def test_cold_shutdown_cancels_in_flight_execution(self):
-        """Second signal cancels the in-flight execution; work() returns
-        cleanly (no SystemExit, unlike the sync worker) and the job stays
-        STARTED until StartedJobRegistry cleanup eventually fails it as
-        abandoned."""
-        job = self.queue.enqueue(sleep_async, 20)
+        """Cold shutdown returns promptly and leaves the job STARTED,
+        even if it swallows cancellation."""
+        job = self.queue.enqueue(return_on_cancel_async, 20)
         worker = AsyncWorker([self.queue], connection=self.connection)
 
-        kill_process = Process(target=kill_worker, args=(os.getpid(), True, 0.5))
-        kill_process.start()
-        started_at = time.monotonic()
-        worker.work()
-        kill_process.join()
+        def cold_shutdown():
+            self._wait_until_entered(job)
+            os.kill(os.getpid(), signal.SIGTERM)
+            time.sleep(0.2)
+            os.kill(os.getpid(), signal.SIGTERM)
 
-        self.assertLess(time.monotonic() - started_at, 10)
+        elapsed = self._work_while_executing(worker, cold_shutdown)
+
+        self.assertLess(elapsed, 10)
         self.assertEqual(job.get_status(), JobStatus.STARTED)
 
     def test_idle_shutdown_cancels_blocking_dequeue(self):

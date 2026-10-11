@@ -104,6 +104,19 @@ async def raise_on_cancel_async(seconds):
         raise ValueError('cleanup failed')
 
 
+async def raise_timeout_on_cancel_async(seconds):
+    try:
+        job = get_current_job()
+        job.connection.set(f'entered:{job.id}', 1, ex=60)
+        await asyncio.sleep(seconds)
+    except asyncio.CancelledError:
+        raise TimeoutError('timed out during cancellation')
+
+
+async def raise_cancelled_async():
+    raise asyncio.CancelledError()
+
+
 async def record_job_loop(state, error=None):
     """Record the coroutine job's loop and context, optionally raising an error."""
     state['loop'] = asyncio.get_running_loop()

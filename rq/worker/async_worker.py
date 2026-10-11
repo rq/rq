@@ -332,30 +332,32 @@ class AsyncWorker(BaseWorker):
         try:
             await asyncio.to_thread(self._start_execution, job)
             timeout = None if job.timeout == -1 else job.timeout or self.queue_class.DEFAULT_TIMEOUT
-            timeout_context = asyncio.timeout(timeout)
             # The job runs as its own task so a stop command can cancel the job
             # without cancelling this task, which only a cold shutdown does.
             execution._job_task = asyncio.create_task(job.perform_async())
             if execution.id in self._stopped_execution_ids:
                 execution._job_task.cancel()  # stop requested before the job started
+            error = None
             try:
-                async with timeout_context:
+                async with asyncio.timeout(timeout) as timeout_context:
                     result = await execution._job_task
-            except TimeoutError as error:
-                if timeout_context.expired():
-                    raise JobTimeoutException(f'Task exceeded maximum timeout value ({timeout} seconds)') from error
-                raise
-            except asyncio.CancelledError:
-                if execution.id not in self._stopped_execution_ids:
-                    raise  # cold shutdown
-            except Exception:
-                if execution.id not in self._stopped_execution_ids:
-                    raise  # a regular failure
-            # A stopped job is finalized as stopped however it reacted to the
-            # cancellation: escaping, swallowing it or raising from its cleanup.
+            except (Exception, asyncio.CancelledError) as job_error:
+                error = job_error
+
+            # Cold shutdown is the only thing that cancels this task directly (asyncio.timeout
+            # uncancels its own request), so a pending cancellation means cold shutdown.
+            if cast(asyncio.Task, asyncio.current_task()).cancelling():
+                return  # the job stays STARTED
+            # A stopped job is finalized as stopped however it reacted to the cancellation.
             if execution.id in self._stopped_execution_ids:
                 await asyncio.to_thread(self._finalize_stopped, job, queue, execution)
                 return
+            if timeout_context.expired():
+                raise JobTimeoutException(f'Task exceeded maximum timeout value ({timeout} seconds)') from error
+            if isinstance(error, asyncio.CancelledError):
+                raise RuntimeError('Job was cancelled by its own code') from error
+            if error is not None:  # an exception class may define a falsy __bool__
+                raise error
             await asyncio.to_thread(self._finalize_success, job, queue, execution, result)
         except Exception:
             exc_info = sys.exc_info()
