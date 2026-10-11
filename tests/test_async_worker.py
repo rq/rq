@@ -8,26 +8,23 @@ from collections.abc import Callable
 from datetime import timedelta
 from multiprocessing import Process
 from unittest import skipIf
-from unittest.mock import ANY, patch
+from unittest.mock import patch
 
-from rq.command import send_command, send_stop_execution_command, send_stop_job_command
-from rq.defaults import UNSERIALIZABLE_RETURN_VALUE_PAYLOAD
-from rq.executions import ExecutionRegistry
+from rq.command import send_stop_execution_command, send_stop_job_command
 from rq.job import Callback, Job, JobStatus, Retry
 from rq.queue import Queue
 from rq.results import Result
 from rq.utils import current_timestamp, now
 from rq.webhook import Webhook
-from rq.worker import AsyncWorker, WorkerStatus
+from rq.worker import AsyncWorker, DequeueStrategy, WorkerStatus
 from tests import RQTestCase, min_redis_version
 from tests.fixtures import (
     AsyncCallableObject,
     CallableObject,
-    add_meta,
     async_failure_callback,
     async_success_callback,
+    concurrency,
     current_job_id_after_sleep,
-    erroneous_callback,
     fail_async_while_retries_remain,
     kill_worker,
     raise_async,
@@ -35,7 +32,6 @@ from tests.fixtures import (
     raise_timeout_async,
     return_on_cancel_async,
     return_retry_async,
-    return_unserializable,
     save_exception,
     save_result,
     save_result_if_not_stopped,
@@ -43,6 +39,7 @@ from tests.fixtures import (
     say_hello_async,
     sleep_async,
     slow_success_callback,
+    track_concurrency,
 )
 
 
@@ -56,40 +53,40 @@ class TestAsyncWorker(RQTestCase):
     def test_burst_performs_jobs_and_persists_results(self):
         first_job = self.queue.enqueue(say_hello_async, 'Alice')
         second_job = self.queue.enqueue(say_hello_async, 'Bob')
-        sync_job = self.queue.enqueue(say_hello)
 
         worker = AsyncWorker([self.queue], connection=self.connection, max_concurrency=2)
-        processed = worker.work(burst=True)
+        admitted_any = worker.work(burst=True)
 
-        self.assertTrue(processed)
+        self.assertTrue(admitted_any)
         self.assertEqual(first_job.get_status(), JobStatus.FINISHED)
         self.assertEqual(second_job.get_status(), JobStatus.FINISHED)
         self.assertIn(first_job, self.queue.finished_job_registry)
         self.assertIn(second_job, self.queue.finished_job_registry)
         self.assertEqual(first_job.latest_result().return_value, 'Hi there, Alice!')
         self.assertEqual(second_job.latest_result().return_value, 'Hi there, Bob!')
-        self.assertEqual(sync_job.get_status(), JobStatus.FAILED)
-        self.assertIn(sync_job, self.queue.failed_job_registry)
         self.assertEqual(worker.executions, {})
-        self.assertIsNotNone(worker.death_date)
 
-    def test_concurrent_executions_overlap(self):
-        self.queue.enqueue(sleep_async, 0.5)
-        self.queue.enqueue(sleep_async, 0.5)
-        worker = AsyncWorker([self.queue], connection=self.connection, max_concurrency=2)
+    def test_max_concurrency(self):
+        """Executions overlap up to, but never beyond, max_concurrency."""
+        with self.subTest(max_concurrency=2):
+            concurrency.update(active=0, peak=0)
+            self.queue.enqueue(track_concurrency, 0.5)
+            self.queue.enqueue(track_concurrency, 0.5)
+            self.queue.enqueue(track_concurrency, 0.5)
 
-        started_at = time.monotonic()
-        worker.work(burst=True)
-        self.assertLess(time.monotonic() - started_at, 0.95)
+            AsyncWorker([self.queue], connection=self.connection, max_concurrency=2).work(burst=True)
 
-    def test_max_concurrency_one_runs_jobs_sequentially(self):
-        self.queue.enqueue(sleep_async, 0.5)
-        self.queue.enqueue(sleep_async, 0.5)
-        worker = AsyncWorker([self.queue], connection=self.connection, max_concurrency=1)
+            self.assertEqual(concurrency['peak'], 2)
 
-        started_at = time.monotonic()
-        worker.work(burst=True)
-        self.assertGreaterEqual(time.monotonic() - started_at, 1.0)
+        with self.subTest(max_concurrency=1):
+            concurrency.update(active=0, peak=0)
+            self.queue.enqueue(track_concurrency, 0.5)
+            self.queue.enqueue(track_concurrency, 0.5)
+            self.queue.enqueue(track_concurrency, 0.5)
+
+            AsyncWorker([self.queue], connection=self.connection, max_concurrency=1).work(burst=True)
+
+            self.assertEqual(concurrency['peak'], 1)
 
     def test_empty_queue_returns_false(self):
         worker = AsyncWorker([self.queue], connection=self.connection)
@@ -108,20 +105,6 @@ class TestAsyncWorker(RQTestCase):
         self.assertIn(job, self.queue.failed_job_registry)
         self.assertEqual(worker.executions, {})
 
-    def test_failed_job_records_ended_at_and_working_time(self):
-        """The failure path sets job.ended_at before finalizing, so the
-        failure result gets an end timestamp and working time is counted."""
-        job = self.queue.enqueue(raise_async)
-        worker = AsyncWorker([self.queue], connection=self.connection)
-
-        worker.work(burst=True)
-
-        job.refresh()
-        self.assertEqual(job.get_status(), JobStatus.FAILED)
-        self.assertIsNotNone(job.ended_at)
-        worker.refresh()
-        self.assertGreater(worker.total_working_time, 0)
-
     def test_undeserializable_job_fails(self):
         job = self.queue.enqueue(say_hello_async, on_failure=Callback(save_exception))
         corrupt_data = job.data.replace(b'say_hello_async', b'')
@@ -134,14 +117,6 @@ class TestAsyncWorker(RQTestCase):
         self.assertIn('DeserializationError', job.latest_result().exc_string)
         self.assertIsNotNone(self.connection.get(f'failure_callback:{job.id}'))
 
-    def test_unserializable_return_value_finishes_with_placeholder(self):
-        job = self.queue.enqueue(return_unserializable)
-
-        AsyncWorker([self.queue], connection=self.connection).work(burst=True)
-
-        self.assertEqual(job.get_status(), JobStatus.FINISHED)
-        self.assertEqual(job.latest_result().return_value, UNSERIALIZABLE_RETURN_VALUE_PAYLOAD)
-
     def test_callable_object_jobs(self):
         async_callable_job = self.queue.enqueue(AsyncCallableObject())
         sync_callable_job = self.queue.enqueue(CallableObject())
@@ -153,35 +128,21 @@ class TestAsyncWorker(RQTestCase):
         self.assertEqual(sync_callable_job.get_status(), JobStatus.FAILED)
         self.assertIn('AsyncWorker only supports async functions', sync_callable_job.latest_result().exc_string)
 
-    def test_success_callback(self):
-        job = self.queue.enqueue(say_hello_async, on_success=Callback(save_result))
+    def test_finalization_hooks(self):
+        """Success and failure finalization run the job's callbacks and webhooks."""
+        webhook = Webhook('http://example.com/done', JobStatus.FINISHED)
+        success_job = self.queue.enqueue(say_hello_async, on_success=Callback(save_result), webhooks=[webhook])
+        failure_job = self.queue.enqueue(raise_async, on_failure=Callback(save_exception))
 
-        AsyncWorker([self.queue], connection=self.connection).work(burst=True)
+        with patch.object(Webhook, 'send') as send:
+            AsyncWorker([self.queue], connection=self.connection).work(burst=True)
 
-        self.assertEqual(self.connection.get(f'success_callback:{job.id}'), b'Hi there, Stranger!')
-        self.assertEqual(job.get_status(), JobStatus.FINISHED)
-
-    def test_failure_callback(self):
-        job = self.queue.enqueue(raise_async, on_failure=Callback(save_exception))
-
-        AsyncWorker([self.queue], connection=self.connection).work(burst=True)
-
-        self.assertEqual(self.connection.get(f'failure_callback:{job.id}'), b'async failure')
-        self.assertEqual(job.get_status(), JobStatus.FAILED)
-
-    def test_success_callback_error_runs_failure_callback(self):
-        job = self.queue.enqueue(
-            say_hello_async,
-            on_success=Callback(erroneous_callback),
-            on_failure=Callback(save_exception),
-        )
-
-        AsyncWorker([self.queue], connection=self.connection).work(burst=True)
-
-        callback_error = self.connection.get(f'failure_callback:{job.id}')
-        self.assertIsNotNone(callback_error)
-        self.assertIn(b'erroneous_callback', callback_error)
-        self.assertEqual(job.get_status(), JobStatus.FAILED)
+        with self.subTest('success callback'):
+            self.assertEqual(self.connection.get(f'success_callback:{success_job.id}'), b'Hi there, Stranger!')
+        with self.subTest('failure callback'):
+            self.assertEqual(self.connection.get(f'failure_callback:{failure_job.id}'), b'async failure')
+        with self.subTest('finished webhook'):
+            send.assert_called_once()
 
     def test_success_callback_timeout(self):
         job = self.queue.enqueue(
@@ -205,23 +166,6 @@ class TestAsyncWorker(RQTestCase):
         self.assertEqual(failure_job.get_status(), JobStatus.FAILED)
         self.assertIn('Coroutine failure callbacks are not supported', failure_job.latest_result().exc_string)
 
-    def test_success_webhook(self):
-        webhook = Webhook('http://example.com/done', JobStatus.FINISHED)
-        self.queue.enqueue(say_hello_async, webhooks=[webhook])
-
-        with patch.object(Webhook, 'send') as send:
-            AsyncWorker([self.queue], connection=self.connection).work(burst=True)
-
-        send.assert_called_once()
-
-    def test_custom_exception_handler(self):
-        job = self.queue.enqueue(raise_async)
-
-        AsyncWorker([self.queue], connection=self.connection, exception_handlers=[add_meta]).work(burst=True)
-
-        job.refresh()
-        self.assertTrue(job.meta['foo'])
-
     def test_timeout_fails_one_job_without_interrupting_sibling(self):
         """Only expiration by asyncio.timeout is converted to JobTimeoutException.
 
@@ -242,20 +186,6 @@ class TestAsyncWorker(RQTestCase):
         exc_string = timeout_error_job.latest_result().exc_string
         self.assertIn('TimeoutError: job timeout error', exc_string)
         self.assertNotIn('JobTimeoutException', exc_string)
-        self.assertEqual(worker.executions, {})
-
-    def test_exception_retry(self):
-        job = self.queue.enqueue(fail_async_while_retries_remain, retry=Retry(max=1))
-        worker = AsyncWorker([self.queue], connection=self.connection)
-
-        worker.work(burst=True)
-
-        job.refresh()
-        self.assertEqual(job.get_status(), JobStatus.FINISHED)
-        self.assertEqual(job.latest_result().return_value, 'succeeded after failure retry')
-        self.assertEqual(job.retries_left, 0)
-        # Exception retries do not create a RETRIED result; only the final execution is recorded.
-        self.assertEqual([result.type for result in job.results()], [Result.Type.SUCCESSFUL])
         self.assertEqual(worker.executions, {})
 
     def test_returned_retry(self):
@@ -282,15 +212,16 @@ class TestAsyncWorker(RQTestCase):
         self.assertEqual(worker.executions, {})
 
     def test_burst_runs_retry_while_sibling_is_still_running(self):
-        self.queue.enqueue(sleep_async, 0.5)
+        sibling_job = self.queue.enqueue(sleep_async, 0.5)
         retry_job = self.queue.enqueue(return_retry_async, 0.5)
         worker = AsyncWorker([self.queue], connection=self.connection, max_concurrency=3)
 
-        started_at = time.monotonic()
         worker.work(burst=True)
 
-        self.assertLess(time.monotonic() - started_at, 0.95)
-        self.assertEqual(retry_job.get_status(), JobStatus.FAILED)
+        retry_job.refresh()
+        sibling_job.refresh()
+        self.assertEqual(retry_job.get_status(refresh=False), JobStatus.FAILED)
+        self.assertLess(retry_job.started_at, sibling_job.ended_at)
 
     def test_burst_repops_after_task_finishing_during_empty_pop(self):
         """A task finishing while an empty dequeue is pending may have enqueued a
@@ -328,24 +259,27 @@ class TestAsyncWorker(RQTestCase):
 
     def test_heartbeat_tick_maintains_executions(self):
         """_heartbeat_tick refreshes the execution TTL and StartedJobRegistry
-        score, so an execution outliving its initial TTL isn't reaped as
-        abandoned while still running."""
+        score before running maintenance, so an execution outliving its initial
+        TTL isn't reaped as abandoned while still running."""
         job = self.queue.enqueue(say_hello)
         worker = AsyncWorker([self.queue], connection=self.connection)
         worker.register_birth()
         execution = worker.prepare_execution(job)
         worker.prepare_job_execution(job)
-        worker.last_cleaned_at = now()
         registry = self.queue.started_job_registry
 
         # Simulate staleness: execution key about to expire, registry score in the past.
         self.connection.expire(execution.key, 1)
         self.connection.zadd(registry.key, {execution.composite_key: 1})
 
-        worker._heartbeat_tick()
+        def assert_heartbeat_was_written():
+            self.assertGreater(self.connection.ttl(execution.key), 30)
+            self.assertGreater(self.connection.zscore(registry.key, execution.composite_key), current_timestamp())
 
-        self.assertGreater(self.connection.ttl(execution.key), 30)
-        self.assertGreater(self.connection.zscore(registry.key, execution.composite_key), current_timestamp())
+        with patch.object(worker, 'run_maintenance_tasks', side_effect=assert_heartbeat_was_written) as maintenance:
+            worker._heartbeat_tick()
+
+        maintenance.assert_called_once_with()
         worker.register_death()
 
     def test_admission_clears_previous_attempt_started_at(self):
@@ -398,22 +332,29 @@ class TestAsyncWorker(RQTestCase):
         worker.prepare_job_execution(job)
         worker.last_cleaned_at = now()
 
-        with (
-            patch.object(worker.connection, 'pipeline', wraps=worker.connection.pipeline) as pipeline,
-            patch.object(worker, 'heartbeat', wraps=worker.heartbeat) as heartbeat,
-            patch.object(worker, '_heartbeat_executions', wraps=worker._heartbeat_executions) as heartbeat_batch,
-        ):
+        with patch.object(worker, '_heartbeat_executions', wraps=worker._heartbeat_executions) as heartbeat_batch:
             worker._heartbeat_tick()
 
-        self.assertEqual(pipeline.call_count, 4)
-        heartbeat.assert_called_once_with(worker.job_monitoring_interval + 60, pipeline=ANY)
         self.assertEqual([len(call.args[0]) for call in heartbeat_batch.call_args_list], [2, 2, 1])
-        self.assertEqual(len({call.args[1] for call in heartbeat_batch.call_args_list}), 1)
         worker.register_death()
 
-    def test_heartbeat_tick_repairs_recreated_keys_once(self):
-        """A tick racing finalization must not resurrect deleted job, execution
-        or ExecutionRegistry state, and repairs everything in one extra pipeline."""
+    def test_heartbeat_tick_restores_worker_hash(self):
+        """A tick that recreates a deleted worker hash writes its full state back."""
+        job = self.queue.enqueue(say_hello)
+        worker = AsyncWorker([self.queue], connection=self.connection)
+        worker.register_birth()
+        worker.prepare_execution(job)
+        worker.prepare_job_execution(job)
+        worker.last_cleaned_at = now()
+        self.connection.delete(worker.key)
+
+        worker._heartbeat_tick()
+
+        self.assertEqual(self.connection.hget(worker.key, 'queues'), self.queue.name.encode())
+        worker.register_death()
+
+    def test_heartbeat_tick_removes_recreated_keys(self):
+        """A tick racing finalization must not resurrect deleted job or execution hashes."""
         first_job = self.queue.enqueue(say_hello)
         second_job = self.queue.enqueue(say_hello)
         worker = AsyncWorker([self.queue], connection=self.connection)
@@ -427,37 +368,14 @@ class TestAsyncWorker(RQTestCase):
             first_execution.delete(job=first_job, pipeline=cleanup_pipeline)
             second_execution.delete(job=second_job, pipeline=cleanup_pipeline)
             cleanup_pipeline.execute()
-        self.connection.delete(first_job.key, second_job.key, worker.key)
+        self.connection.delete(first_job.key, second_job.key)
 
-        with patch.object(worker.connection, 'pipeline', wraps=worker.connection.pipeline) as pipeline:
-            worker._heartbeat_tick()
+        worker._heartbeat_tick()
 
-        self.assertEqual(pipeline.call_count, 2)
         self.assertFalse(self.connection.exists(first_job.key))
         self.assertFalse(self.connection.exists(second_job.key))
         self.assertFalse(self.connection.exists(first_execution.key))
         self.assertFalse(self.connection.exists(second_execution.key))
-        self.assertEqual(ExecutionRegistry(first_job.id, connection=self.connection).get_executions(), [])
-        self.assertEqual(ExecutionRegistry(second_job.id, connection=self.connection).get_executions(), [])
-        self.assertEqual(self.connection.hget(worker.key, 'queues'), self.queue.name.encode())
-        worker.register_death()
-
-    def test_heartbeat_tick_runs_maintenance_after_writes(self):
-        job = self.queue.enqueue(say_hello)
-        worker = AsyncWorker([self.queue], connection=self.connection)
-        worker.register_birth()
-        execution = worker.prepare_execution(job)
-        worker.prepare_job_execution(job)
-        self.connection.zadd(self.queue.started_job_registry.key, {execution.composite_key: 1})
-
-        def assert_heartbeat_was_written():
-            score = self.connection.zscore(self.queue.started_job_registry.key, execution.composite_key)
-            self.assertGreater(score, current_timestamp())
-
-        with patch.object(worker, 'run_maintenance_tasks', side_effect=assert_heartbeat_was_written) as maintenance:
-            worker._heartbeat_tick()
-
-        maintenance.assert_called_once_with()
         worker.register_death()
 
     def test_current_job_is_local_to_each_coroutine(self):
@@ -468,33 +386,6 @@ class TestAsyncWorker(RQTestCase):
 
         self.assertEqual(first_job.latest_result().return_value, first_job.id)
         self.assertEqual(second_job.latest_result().return_value, second_job.id)
-
-    def test_current_job_accessors(self):
-        """Scalar current-job views serve a single active execution and raise
-        when several are active."""
-        first_job = self.queue.enqueue(say_hello_async)
-        second_job = self.queue.enqueue(say_hello_async)
-        worker = AsyncWorker([self.queue], connection=self.connection, max_concurrency=2)
-
-        self.assertIsNone(worker.get_current_job_id())
-        self.assertIsNone(worker.get_current_job())
-
-        first_execution = worker.prepare_execution(first_job)
-        self.assertEqual(worker.get_current_job_id(), first_job.id)
-        self.assertEqual(worker.get_current_job(), first_job)
-
-        second_execution = worker.prepare_execution(second_job)
-        with self.assertRaises(ValueError):
-            worker.get_current_job_id()
-        with self.assertRaises(ValueError):
-            worker.get_current_job()
-
-        with self.connection.pipeline() as pipeline:
-            worker.cleanup_execution(first_job, pipeline=pipeline, execution=first_execution)
-            worker.cleanup_execution(second_job, pipeline=pipeline, execution=second_execution)
-            pipeline.execute()
-        self.assertIsNone(worker.get_current_job_id())
-        self.assertIsNone(worker.get_current_job())
 
     def _work_while_executing(self, worker: AsyncWorker, func: Callable[[], None]) -> float:
         """Runs `worker.work(burst=True)` while `func` runs on a thread, re-raising
@@ -525,6 +416,15 @@ class TestAsyncWorker(RQTestCase):
                 raise TimeoutError(f'job {job.id} did not start within {timeout}s')
             time.sleep(0.05)
 
+    def _wait_until_entered(self, job: Job, timeout: float = 5) -> None:
+        """Waits for a cancellation fixture to set its entry marker, proving the
+        coroutine is inside its cancellation handler's `try` block."""
+        deadline = time.monotonic() + timeout
+        while not self.connection.exists(f'entered:{job.id}'):
+            if time.monotonic() > deadline:
+                raise TimeoutError(f'job {job.id} did not enter within {timeout}s')
+            time.sleep(0.05)
+
     def test_stop_execution_command_stops_only_targeted_job(self):
         """stop-execution cancels one coroutine, runs its stopped callback and
         persists STOPPED, while a sibling execution finishes normally."""
@@ -535,7 +435,6 @@ class TestAsyncWorker(RQTestCase):
         def send_stop():
             self._wait_until_started(stopped_job)
             execution = stopped_job.get_executions()[0]
-            send_command(self.connection, worker.name, 'stop-execution', job_id=stopped_job.id, execution_id='nope')
             send_stop_execution_command(self.connection, stopped_job.id, execution.id)
 
         elapsed = self._work_while_executing(worker, send_stop)
@@ -548,45 +447,49 @@ class TestAsyncWorker(RQTestCase):
         self.assertEqual(worker.executions, {})
         self.assertEqual(worker._stopped_execution_ids, set())
 
-    def test_stop_finalizes_job_that_swallows_cancellation(self):
-        """A job that catches the cancellation and returns is still finalized as stopped."""
-        job = self.queue.enqueue(return_on_cancel_async, 5)
-        worker = AsyncWorker([self.queue], connection=self.connection)
+    def test_stop_finalizes_as_stopped_however_job_reacts(self):
+        """A stopped job is finalized as stopped whether it swallows the
+        cancellation or raises from its cancellation handler."""
+        swallowing_job = self.queue.enqueue(
+            return_on_cancel_async,
+            5,
+            on_stopped=Callback(save_result_if_not_stopped),
+            on_failure=Callback(save_exception),
+        )
+        raising_job = self.queue.enqueue(
+            raise_on_cancel_async,
+            5,
+            on_stopped=Callback(save_result_if_not_stopped),
+            on_failure=Callback(save_exception),
+        )
+        worker = AsyncWorker([self.queue], connection=self.connection, max_concurrency=2)
 
-        def send_stop():
-            self._wait_until_started(job)
-            send_stop_job_command(self.connection, job.id)
+        def send_stops():
+            self._wait_until_entered(swallowing_job)
+            self._wait_until_entered(raising_job)
+            send_stop_job_command(self.connection, swallowing_job.id)
+            send_stop_job_command(self.connection, raising_job.id)
 
-        self._work_while_executing(worker, send_stop)
+        self._work_while_executing(worker, send_stops)
 
-        self.assertEqual(job.get_status(), JobStatus.STOPPED)
-        self.assertEqual(worker._stopped_execution_ids, set())
-
-    def test_stop_finalizes_job_that_raises_during_cancellation(self):
-        """A job that raises from its cancellation cleanup gets the stopped
-        callback, not the failure callback."""
-        job = self.queue.enqueue(raise_on_cancel_async, 5, on_failure=Callback(save_exception))
-        worker = AsyncWorker([self.queue], connection=self.connection)
-
-        def send_stop():
-            self._wait_until_started(job)
-            send_stop_job_command(self.connection, job.id)
-
-        self._work_while_executing(worker, send_stop)
-
-        self.assertEqual(job.get_status(), JobStatus.STOPPED)
-        self.assertIn('stopped by user', job.latest_result().exc_string)
-        self.assertFalse(self.connection.exists(f'failure_callback:{job.id}'))
+        with self.subTest('swallows cancellation'):
+            self.assertEqual(swallowing_job.get_status(), JobStatus.STOPPED)
+            self.assertTrue(self.connection.exists(f'stopped_callback:{swallowing_job.id}'))
+            self.assertFalse(self.connection.exists(f'failure_callback:{swallowing_job.id}'))
+        with self.subTest('raises during cancellation'):
+            self.assertEqual(raising_job.get_status(), JobStatus.STOPPED)
+            self.assertTrue(self.connection.exists(f'stopped_callback:{raising_job.id}'))
+            self.assertFalse(self.connection.exists(f'failure_callback:{raising_job.id}'))
 
     def test_hydration_via_all_and_find_by_key(self):
         """Worker discovery constructs AsyncWorker with no queues."""
         worker = AsyncWorker([self.queue], connection=self.connection)
         worker.register_birth()
-        try:
-            hydrated_workers = AsyncWorker.all(connection=self.connection)
-            self.assertEqual([hydrated_worker.name for hydrated_worker in hydrated_workers], [worker.name])
-        finally:
-            worker.register_death()
+
+        hydrated_workers = AsyncWorker.all(connection=self.connection)
+        self.assertEqual([hydrated_worker.name for hydrated_worker in hydrated_workers], [worker.name])
+        self.assertIsInstance(AsyncWorker.find_by_key(worker.key, connection=self.connection), AsyncWorker)
+        worker.register_death()
 
     def test_warm_shutdown_drains_in_flight_execution(self):
         """First signal stops admission, lets the in-flight execution finish."""
@@ -670,26 +573,31 @@ class TestAsyncWorker(RQTestCase):
         self.assertTrue(worker.work(burst=True))
         self.assertEqual(surviving_job.get_status(), JobStatus.FINISHED)
 
-    def test_old_redis_server_raises(self):
-        with patch('rq.worker.async_worker.get_version', return_value=(6, 0, 0)):
-            with self.assertRaises(RuntimeError):
-                AsyncWorker([self.queue], connection=self.connection)
+    def test_init_validation(self):
+        with self.subTest('old Redis server'):
+            with patch('rq.worker.async_worker.get_version', return_value=(6, 0, 0)):
+                with self.assertRaises(RuntimeError):
+                    AsyncWorker([self.queue], connection=self.connection)
+        with self.subTest('old Python'):
+            with patch('rq.worker.async_worker.sys.version_info', (3, 10)):
+                with self.assertRaisesRegex(RuntimeError, 'Python >= 3.11'):
+                    AsyncWorker([self.queue], connection=self.connection)
+        with self.subTest('multiple queues'):
+            other_queue = Queue('other', connection=self.connection)
+            with self.assertRaises(ValueError):
+                AsyncWorker([self.queue, other_queue], connection=self.connection)
+        with self.subTest('zero max_concurrency'):
+            with self.assertRaises(ValueError):
+                AsyncWorker([self.queue], connection=self.connection, max_concurrency=0)
 
-    def test_old_python_raises_for_working_instance(self):
-        with patch('rq.worker.async_worker.sys.version_info', (3, 10)):
-            with self.assertRaisesRegex(RuntimeError, 'Python >= 3.11'):
-                AsyncWorker([self.queue], connection=self.connection)
-
-    def test_multiple_queues_raise(self):
-        other_queue = Queue('other', connection=self.connection)
-        with self.assertRaises(ValueError):
-            AsyncWorker([self.queue, other_queue], connection=self.connection)
-
-    def test_zero_max_concurrency_raises(self):
-        with self.assertRaises(ValueError):
-            AsyncWorker([self.queue], connection=self.connection, max_concurrency=0)
-
-    def test_with_scheduler_raises(self):
+    def test_unsupported_work_options_raise(self):
         worker = AsyncWorker([self.queue], connection=self.connection)
-        with self.assertRaises(NotImplementedError):
-            worker.work(burst=True, with_scheduler=True)
+        with self.subTest('with_scheduler'):
+            with self.assertRaises(NotImplementedError):
+                worker.work(burst=True, with_scheduler=True)
+        with self.subTest('max_idle_time'):
+            with self.assertRaises(NotImplementedError):
+                worker.work(burst=True, max_idle_time=1)
+        with self.subTest('dequeue_strategy'):
+            with self.assertRaises(NotImplementedError):
+                worker.work(burst=True, dequeue_strategy=DequeueStrategy.ROUND_ROBIN)

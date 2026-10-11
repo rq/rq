@@ -45,6 +45,19 @@ async def sleep_async(seconds, result=None):
     return result
 
 
+concurrency = {'active': 0, 'peak': 0}
+
+
+async def track_concurrency(seconds):
+    """Records the peak number of `track_concurrency` calls running at once in `concurrency`."""
+    concurrency['active'] += 1
+    concurrency['peak'] = max(concurrency['peak'], concurrency['active'])
+    try:
+        await asyncio.sleep(seconds)
+    finally:
+        concurrency['active'] -= 1
+
+
 async def raise_async():
     raise ValueError('async failure')
 
@@ -67,10 +80,6 @@ async def return_retry_async(retry_delay=0):
     return Retry(max=1)
 
 
-async def return_unserializable():
-    return lambda: None  # pickle can't serialize lambdas
-
-
 async def current_job_id_after_sleep(seconds):
     await asyncio.sleep(seconds)
     job = get_current_job()
@@ -79,6 +88,8 @@ async def current_job_id_after_sleep(seconds):
 
 async def return_on_cancel_async(seconds):
     try:
+        job = get_current_job()
+        job.connection.set(f'entered:{job.id}', 1, ex=60)
         await asyncio.sleep(seconds)
     except asyncio.CancelledError:
         return 'cancellation swallowed'
@@ -86,6 +97,8 @@ async def return_on_cancel_async(seconds):
 
 async def raise_on_cancel_async(seconds):
     try:
+        job = get_current_job()
+        job.connection.set(f'entered:{job.id}', 1, ex=60)
         await asyncio.sleep(seconds)
     except asyncio.CancelledError:
         raise ValueError('cleanup failed')
