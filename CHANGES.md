@@ -22,7 +22,6 @@ Breaking Changes:
 * `get_current_job()` now uses `contextvars` instead of thread-locals; gevent-based custom workers need `greenlet` >= 0.4.17. Thanks @selwin!
 * RQ now disables propagation on loggers it configures itself to prevent double logging when applications configure logging afterwards. Thanks @selwin!
 
-
 Bug Fixes:
 * `Job.delete()` and `Queue.empty()` now also remove the deleted jobs' stored execution results.
 * `enqueue_at()` and `enqueue_in()` now honor `unique=True`. Thanks @jamalkamaladdin!
