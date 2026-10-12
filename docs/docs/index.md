@@ -617,7 +617,7 @@ a redis instance for storing states related to job execution and completion.
 
 To learn about workers, see the [workers][w] documentation.
 
-[w]: {{site.baseurl}}workers/
+[w]: /docs/workers/
 
 
 ## Suspending and Resuming
