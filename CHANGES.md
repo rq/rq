@@ -8,6 +8,7 @@ New Features:
 * `Execution` now stores its job ID. Thanks @selwin!
 
 Breaking Changes:
+* `SpawnWorker` now uses `os.posix_spawn()` and requires POSIX. Thanks @selwin!
 * RQ now requires `redis-py` >= 5.0.1. Thanks @selwin!
 * `CronScheduler` now evaluates cron strings in local timezone instead of UTC (like system cron). Thanks @selwin!
 * Dependent jobs now pass through a new `READY_TO_ENQUEUE` status and `ReadyJobRegistry` before being enqueued. Thanks @selwin!
