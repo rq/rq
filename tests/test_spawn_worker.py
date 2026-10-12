@@ -1,8 +1,14 @@
 import os
+import pickle
+import shlex
 import signal
+import sys
+import tempfile
 import time
 from datetime import timezone
 from multiprocessing import Process
+from pathlib import Path
+from unittest import mock
 
 from redis import Redis
 
@@ -15,8 +21,14 @@ from rq.serializers import JSONSerializer
 from rq.worker import SpawnWorker
 from tests import RQTestCase, slow
 from tests.fixtures import (
+    CustomDeathPenalty,
+    CustomJob,
+    CustomQueue,
+    RecordingSpawnWorker,
+    add_meta,
     create_file_after_timeout,
     div_by_zero,
+    get_job_id_from_environ,
     kill_worker,
     say_hello,
 )
@@ -117,6 +129,91 @@ class TestWorker(RQTestCase):
         result = Result.fetch_latest(job)
         self.assertTrue(result.exc_string)
         self.assertEqual(result.type, Result.Type.FAILED)
+
+    def test_horse_receives_worker_configuration(self):
+        """The spawned horse runs with the parent's worker, job, queue and death penalty classes and settings."""
+        queue = CustomQueue('foo', connection=self.connection, job_class=CustomJob)
+        worker = RecordingSpawnWorker([queue], job_class=CustomJob, queue_class=CustomQueue, default_result_ttl=10000)
+        worker.death_penalty_class = CustomDeathPenalty
+        job = queue.enqueue(get_job_id_from_environ)
+
+        worker.work(burst=True)
+
+        self.assertEqual(
+            self.connection.get('spawn-worker-config'), b'RecordingSpawnWorker CustomJob CustomQueue CustomDeathPenalty'
+        )
+        self.assertEqual(job.return_value(), job.id)
+        self.assertTrue(9000 < self.connection.ttl(job.key) <= 10000)
+
+    def test_horse_uses_exception_handlers(self):
+        """The spawned horse runs the parent's exception handlers and honors disable_default_exception_handler."""
+        queue = Queue('foo', connection=self.connection)
+        worker = SpawnWorker([queue], exception_handlers=[add_meta], disable_default_exception_handler=True)
+        job = queue.enqueue(div_by_zero, 1)
+
+        worker.work(burst=True)
+
+        job.refresh()
+        self.assertEqual(job.meta, {'foo': 1})
+        self.assertNotIn(job, FailedJobRegistry(queue=queue))
+
+    def test_rejects_unpicklable_config_before_dequeue(self):
+        queue = Queue('foo', connection=self.connection)
+        queue.enqueue(say_hello)
+        worker = SpawnWorker([queue], exception_handlers=[lambda job, *exc_info: True])
+
+        with self.assertRaises((pickle.PicklingError, AttributeError)):
+            worker.work(burst=True)
+        self.assertEqual(queue.count, 1)
+
+    def test_rejects_main_module_config_before_dequeue(self):
+        def handler(job, *exc_info):
+            return True
+
+        handler.__module__ = '__main__'
+        queue = Queue('foo', connection=self.connection)
+        queue.enqueue(say_hello)
+        worker = SpawnWorker([queue], exception_handlers=[handler])
+
+        with self.assertRaises(ValueError):
+            worker.work(burst=True)
+        self.assertEqual(queue.count, 1)
+
+    def test_horse_gets_own_process_group_at_spawn(self):
+        """The horse is in its own process group before any of its code runs."""
+        queue = Queue('foo', connection=self.connection)
+        queue.enqueue(say_hello)
+        worker = SpawnWorker([queue])
+
+        with tempfile.TemporaryDirectory() as directory:
+            # Holds the child before the interpreter starts, so the group must already be set at spawn
+            release_file = Path(directory) / 'release'
+            wrapper_path = Path(directory) / 'python'
+            wrapper_path.write_text(
+                '#!/bin/sh\n'
+                'i=0\n'
+                f'while [ ! -e {shlex.quote(str(release_file))} ]; do\n'
+                '    i=$((i + 1))\n'
+                '    [ "$i" -gt 1000 ] && exit 1\n'
+                '    sleep 0.01\n'
+                'done\n'
+                f'exec {shlex.quote(sys.executable)} "$@"\n'
+            )
+            wrapper_path.chmod(0o755)
+
+            worker.register_birth()
+            try:
+                job, queue = worker.dequeue_job_and_maintain_ttl(5)
+                execution = worker.prepare_execution(job)
+                with mock.patch('sys.executable', str(wrapper_path)):
+                    worker.fork_work_horse(job, queue)
+                try:
+                    self.assertEqual(os.getpgid(worker.horse_pid), worker.horse_pid)
+                finally:
+                    release_file.touch()
+                    worker.monitor_work_horse(job, queue, execution)
+            finally:
+                worker.register_death()
 
 
 def wait_and_kill_work_horse(pid, time_to_wait=0.0):
