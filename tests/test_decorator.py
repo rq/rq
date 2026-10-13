@@ -4,8 +4,9 @@ from rq.decorators import job
 from rq.job import Job, Retry
 from rq.queue import Queue
 from rq.webhook import Webhook
-from rq.worker import DEFAULT_RESULT_TTL
+from rq.worker import DEFAULT_RESULT_TTL, SimpleWorker
 from tests import RQTestCase
+from tests.fixtures import say_hello
 
 
 class TestDecorator(RQTestCase):
@@ -48,7 +49,7 @@ class TestDecorator(RQTestCase):
         """
         # Ensure default
         result = self.decorated_job.enqueue(1, 2)
-        self.assertEqual(result.result_ttl, DEFAULT_RESULT_TTL)
+        self.assertIsNone(result.result_ttl)
 
         @job('default', result_ttl=10, connection=self.connection)
         def hello():
@@ -56,6 +57,28 @@ class TestDecorator(RQTestCase):
 
         result = hello.enqueue()
         self.assertEqual(result.result_ttl, 10)
+
+    def test_decorator_uses_worker_result_ttl(self):
+        queue = Queue(connection=self.connection)
+        decorated = job(queue, connection=self.connection)(say_hello)
+        for ttl in (DEFAULT_RESULT_TTL, 1234):
+            with self.subTest(ttl=ttl):
+                result = decorated.enqueue()
+                worker = SimpleWorker([queue], default_result_ttl=ttl)
+                worker.work(burst=True)
+
+                self.assertTrue(result.is_finished)
+                self.assertTrue(ttl - 5 <= self.connection.ttl(result.key) <= ttl)
+
+    def test_decorator_result_ttl_overrides_worker(self):
+        queue = Queue(connection=self.connection)
+        decorated = job(queue, connection=self.connection, result_ttl=10)(say_hello)
+        result = decorated.enqueue()
+        worker = SimpleWorker([queue], default_result_ttl=1234)
+        worker.work(burst=True)
+
+        self.assertTrue(result.is_finished)
+        self.assertTrue(5 <= self.connection.ttl(result.key) <= 10)
 
     def test_decorator_accepts_ttl_as_argument(self):
         """Ensure that passing in ttl to the decorator sets the ttl on the job"""
