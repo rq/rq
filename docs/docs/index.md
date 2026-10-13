@@ -283,6 +283,24 @@ The ability to handle job dependencies allows you to split a big job into
 several smaller ones. By default, a job that is dependent on another is enqueued only when
 its dependency finishes *successfully*.
 
+With the two-dependency example above, `baz_job` remains deferred until **both**
+`foo_job` and `bar_job` finish successfully. Either may finish first: one success
+alone does not release `baz_job`. The arrows below represent prerequisites,
+not automatic transfer of the earlier jobs' return values.
+
+<figure>
+  <img src="/img/job-dependencies.png" alt="Both foo_job and bar_job must finish successfully before baz_job is enqueued." width="709" height="296" style="display: block; float: none; width: 100%; height: auto; margin: 0;" />
+  <figcaption>Multiple dependencies form an all-success gate.
+    <a href="/img/job-dependencies.svg">Editable SVG</a>.
+    <a href="https://svgdiagram.ai/diagram-sources/rq-job-dependencies?version=1">Edit diagram</a>.
+  </figcaption>
+</figure>
+
+When all prerequisites are satisfied, the dependent job is enqueued; a worker
+still has to pick it up. By default a failed prerequisite keeps it deferred.
+`Dependency(..., allow_failure=True)`, described below, also accepts failed
+prerequisites, but does not skip prerequisites that are still queued or running.
+
 _New in 1.11.0._
 
 If you want a job's dependencies to execute regardless if the job completes or fails, RQ provides
