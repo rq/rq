@@ -221,6 +221,8 @@ class SpawnWorker(Worker):
         os.environ['RQ_EXECUTION_ID'] = self.execution.id  # type: ignore
 
         redis_kwargs = get_connection_kwargs(self.connection)
+        if 'path' in redis_kwargs:
+            redis_kwargs['unix_socket_path'] = redis_kwargs.pop('path')
         if redis_kwargs.get('retry'):
             # Remove retry from connection kwargs so they can be embedded in the child source
             del redis_kwargs['retry']

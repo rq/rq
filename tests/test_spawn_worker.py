@@ -10,7 +10,7 @@ from multiprocessing import Process
 from pathlib import Path
 from unittest import mock
 
-from redis import Redis
+from redis import Redis, UnixDomainSocketConnection
 
 from rq import Queue
 from rq.connections import get_connection_kwargs
@@ -49,6 +49,31 @@ class TestWorker(RQTestCase):
 
         registry = queue.started_job_registry
         self.assertEqual(registry.get_job_ids(), [])
+
+    def test_horse_rebuilds_unix_socket_connection(self):
+        connection = Redis(unix_socket_path='/tmp/redis.sock', db=5, password='test-password')
+        queue = Queue('foo', connection=connection)
+        worker = SpawnWorker([queue], connection=connection, prepare_for_work=False)
+        original_kwargs = connection.connection_pool.connection_kwargs.copy()
+        worker.execution = mock.Mock(id='execution-id')
+        job = Job.create(say_hello, connection=connection)
+
+        with mock.patch('os.posix_spawn', return_value=123) as spawn:
+            worker.fork_work_horse(job, queue)
+
+        child_source = spawn.call_args.args[1][2]
+        with mock.patch.object(SpawnWorker, 'find_by_key', return_value=None) as find_worker:
+            with self.assertRaises(SystemExit) as exited:
+                exec(child_source, {})
+
+        self.assertEqual(exited.exception.code, 1)
+        child_connection = find_worker.call_args.kwargs['connection']
+        self.assertIs(child_connection.connection_pool.connection_class, UnixDomainSocketConnection)
+        child_kwargs = child_connection.connection_pool.connection_kwargs
+        self.assertEqual(child_kwargs['path'], '/tmp/redis.sock')
+        self.assertEqual(child_kwargs['db'], 5)
+        self.assertEqual(child_kwargs['password'], 'test-password')
+        self.assertEqual(connection.connection_pool.connection_kwargs, original_kwargs)
 
     def test_filters_non_serializable_connection_kwargs(self):
         """SpawnWorker strips connection-local runtime objects before rebuilding Redis in the child.
