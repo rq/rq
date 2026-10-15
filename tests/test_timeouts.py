@@ -1,14 +1,45 @@
 import time
-from unittest.mock import patch
+import unittest
+from unittest.mock import Mock, patch
 
-from rq import Queue, SimpleWorker
+from rq import Queue, SimpleWorker, Worker
 from rq.registry import FailedJobRegistry, FinishedJobRegistry
 from rq.timeouts import (
+    JobTimeoutException,
     TimerDeathPenalty,
     UnixSignalDeathPenalty,
     get_default_death_penalty_class,
 )
 from tests import RQTestCase
+
+
+class TestTimeoutExceptionHierarchy(unittest.TestCase):
+    @patch('rq.worker.worker_classes.execute_stopped_callback', side_effect=JobTimeoutException('callback timeout'))
+    def test_stopped_callback_timeout_still_finalizes_job_failure(self, callback):
+        worker = Mock(spec=Worker)
+        worker.name = 'test-worker'
+        worker.log = Mock()
+        worker.death_penalty_class = TimerDeathPenalty
+        job = Mock()
+        queue = Mock()
+        execution = Mock()
+
+        Worker._handle_stopped_job(worker, job, queue, execution)
+
+        callback.assert_called_once_with(job, TimerDeathPenalty)
+        worker.handle_job_failure.assert_called_once_with(
+            job, queue=queue, exc_string='Job stopped by user, work-horse terminated.', execution=execution
+        )
+
+    def test_job_timeout_is_not_caught_by_application_exception_handlers(self):
+        def application_job():
+            try:
+                raise JobTimeoutException('timeout')
+            except Exception:
+                return 'timeout was swallowed'
+
+        with self.assertRaises(JobTimeoutException):
+            application_job()
 
 
 class TimerBasedWorker(SimpleWorker):
