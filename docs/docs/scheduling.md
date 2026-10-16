@@ -130,6 +130,8 @@ print(job.repeats_left)  # 3
 print(job.repeat_intervals)  # [30]
 ```
 
+For interval lists, `job.repeat_intervals` contains the remaining intervals. Each scheduled repeat consumes the first interval, keeping the last one for any further repeats.
+
 ## Running the Scheduler
 
 If you use RQ's scheduling and repeating features, you need to run RQ workers with the
