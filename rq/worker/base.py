@@ -1183,7 +1183,7 @@ class BaseWorker:
                     idle_time_left = math.ceil(max_idle_time - idle_for)
                     if idle_time_left <= 0:
                         break
-            except redis.exceptions.ConnectionError as conn_err:
+            except (redis.exceptions.ConnectionError, redis.exceptions.TimeoutError) as conn_err:
                 self.log.error(
                     'Worker %s: could not connect to Redis instance: %s retrying in %d seconds...',
                     self.name,

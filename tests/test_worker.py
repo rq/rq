@@ -407,6 +407,15 @@ class TestWorker(RQTestCase):
             # third is successful, after "recovery"
             assert mocked.call_count == 3
 
+    @slow
+    def test_heartbeat_survives_redis_timeout(self):
+        with mock.patch.object(Worker, 'heartbeat') as mocked:
+            mocked.side_effect = [None, redis.exceptions.TimeoutError()]
+            q = Queue(connection=self.connection)
+            w = Worker([q])
+            w.work(burst=True)
+            assert mocked.call_count == 3
+
     def test_job_timeout_moved_to_failed_job_registry(self):
         """Jobs that run long are moved to FailedJobRegistry"""
         queue = Queue(connection=self.connection)
