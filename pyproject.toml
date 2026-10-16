@@ -52,9 +52,9 @@ scripts.rqworker = "rq.cli:worker" # TODO [v2]: Remove
 [dependency-groups]
 dev = [
   "coverage>=7.6.1",
-  "mypy>=1.18.2",
   "packaging>=24.2",
   "psutil>=7",
+  "pyrefly>=1.4.0",
   "pytest>=8.3.5",
   "pytest-cov>=5",
   "ruff>=0.9.9",
@@ -84,9 +84,9 @@ installer = "uv"
 [tool.hatch.envs.test]
 dependencies = [
   "coverage",
-  "mypy",
   "packaging",
   "psutil",
+  "pyrefly",
   "pytest",
   "pytest-cov",
   "ruff",
@@ -97,7 +97,7 @@ dependencies = [
 ]
 [tool.hatch.envs.test.scripts]
 cov = "pytest --cov=rq --cov-config=.coveragerc --cov-report=xml {args:tests}"
-typing = "mypy rq"
+typing = "pyrefly check"
 
 [tool.ruff]
 target-version = "py310"
@@ -126,18 +126,12 @@ lint.isort.section-order = [
 addopts = "--strict-markers"
 markers = [ "slow", "ssl_test" ]
 
-[tool.mypy]
-allow_redefinition = true
-pretty = true
-show_error_codes = true
-show_error_context = true
-warn_redundant_casts = true
-warn_unused_ignores = true
-warn_unreachable = true
-
-[[tool.mypy.overrides]]
-module = "setproctitle.*"
-ignore_missing_imports = true
+[tool.pyrefly]
+project-includes = [ "rq" ]
+preset = "legacy"
+ignore-missing-imports = [ "setproctitle.*" ]
+errors.redefinition = "ignore"
+errors.redundant-cast = "warn"
 
 [tool.pyright]
 reportOptionalMemberAccess = false

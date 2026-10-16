@@ -518,8 +518,9 @@ class DeferredJobRegistry(BaseRegistry):
     def add(self, job: Job, ttl: int | None = None, pipeline: Pipeline | None = None, xx: bool = False) -> int:
         """Adds a job to the deferred registry, scored by creation time."""
         score = current_timestamp()
-        connection = pipeline if pipeline is not None else self.connection
-        return connection.zadd(self.key, {job.id: score}, xx=xx)
+        if pipeline is not None:
+            return cast(int, pipeline.zadd(self.key, {job.id: score}, xx=xx))
+        return self.connection.zadd(self.key, {job.id: score}, xx=xx)
 
 
 class ReadyJobRegistry(BaseRegistry):
@@ -541,8 +542,9 @@ class ReadyJobRegistry(BaseRegistry):
     def add(self, job: Job, ttl: int | None = None, pipeline: Pipeline | None = None, xx: bool = False) -> int:
         """Adds a job to the ready registry, scored by creation time."""
         score = current_timestamp()
-        connection = pipeline if pipeline is not None else self.connection
-        return connection.zadd(self.key, {job.id: score}, xx=xx)
+        if pipeline is not None:
+            return cast(int, pipeline.zadd(self.key, {job.id: score}, xx=xx))
+        return self.connection.zadd(self.key, {job.id: score}, xx=xx)
 
     def register_jobs(self, jobs: Sequence[Job], pipeline: Pipeline) -> None:
         """Move dependents into the ready state inside the caller's watched transaction.
