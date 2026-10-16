@@ -143,9 +143,7 @@ class TestWorkerPool(RQTestCase):
 
     def test_exception_handlers_argument(self):
         """Ensure exception_handlers argument is properly passed to WorkerPool"""
-        pool = WorkerPool(
-            ['default'], connection=self.connection, num_workers=1, exception_handlers=[add_meta]
-        )
+        pool = WorkerPool(['default'], connection=self.connection, num_workers=1, exception_handlers=[add_meta])
         self.assertEqual(pool.exception_handlers, [add_meta])
 
     def test_exception_handlers_with_none(self):
@@ -158,9 +156,7 @@ class TestWorkerPool(RQTestCase):
         queue = Queue('foo', connection=self.connection)
         job = queue.enqueue(div_by_zero)
 
-        pool = WorkerPool(
-            [queue], connection=self.connection, num_workers=1, exception_handlers=[add_meta]
-        )
+        pool = WorkerPool([queue], connection=self.connection, num_workers=1, exception_handlers=[add_meta])
         try:
             pool.start(burst=True)
 

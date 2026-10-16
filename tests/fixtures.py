@@ -15,7 +15,7 @@ from multiprocessing import Process
 
 from redis import Redis
 
-from rq import Queue, get_current_job
+from rq import Queue, Retry, get_current_job
 from rq.command import send_kill_horse_command, send_shutdown_command
 from rq.connections import get_connection_kwargs
 from rq.defaults import DEFAULT_JOB_MONITORING_INTERVAL
@@ -39,6 +39,83 @@ def say_hello(name=None):
 async def say_hello_async(name=None):
     """A async job with a single argument and a return value."""
     return say_hello(name)
+
+
+async def sleep_async(seconds, result=None):
+    await asyncio.sleep(seconds)
+    return result
+
+
+concurrency = {'active': 0, 'peak': 0}
+
+
+async def track_concurrency(seconds):
+    """Records the peak number of `track_concurrency` calls running at once in `concurrency`."""
+    concurrency['active'] += 1
+    concurrency['peak'] = max(concurrency['peak'], concurrency['active'])
+    try:
+        await asyncio.sleep(seconds)
+    finally:
+        concurrency['active'] -= 1
+
+
+async def raise_async():
+    raise ValueError('async failure')
+
+
+async def raise_timeout_async():
+    raise TimeoutError('job timeout error')
+
+
+async def fail_async_while_retries_remain():
+    job = get_current_job()
+    if job.retries_left and job.retries_left > 0:
+        raise ValueError('retry async job')
+    return 'succeeded after failure retry'
+
+
+async def return_retry_async(retry_delay=0):
+    job = get_current_job()
+    if job.number_of_retries:
+        await asyncio.sleep(retry_delay)
+    return Retry(max=1)
+
+
+async def current_job_id_after_sleep(seconds):
+    await asyncio.sleep(seconds)
+    job = get_current_job()
+    return job.id if job else None
+
+
+async def return_on_cancel_async(seconds):
+    try:
+        job = get_current_job()
+        job.connection.set(f'entered:{job.id}', 1, ex=60)
+        await asyncio.sleep(seconds)
+    except asyncio.CancelledError:
+        return 'cancellation swallowed'
+
+
+async def raise_on_cancel_async(seconds):
+    try:
+        job = get_current_job()
+        job.connection.set(f'entered:{job.id}', 1, ex=60)
+        await asyncio.sleep(seconds)
+    except asyncio.CancelledError:
+        raise ValueError('cleanup failed')
+
+
+async def raise_timeout_on_cancel_async(seconds):
+    try:
+        job = get_current_job()
+        job.connection.set(f'entered:{job.id}', 1, ex=60)
+        await asyncio.sleep(seconds)
+    except asyncio.CancelledError:
+        raise TimeoutError('timed out during cancellation')
+
+
+async def raise_cancelled_async():
+    raise asyncio.CancelledError()
 
 
 async def record_job_loop(state, error=None):
@@ -211,6 +288,11 @@ class CallableObject:
         return "I'm callable"
 
 
+class AsyncCallableObject:
+    async def __call__(self):
+        return 'called asynchronously'
+
+
 class UnicodeStringObject:
     def __repr__(self):
         return 'é'
@@ -377,6 +459,12 @@ def save_result(job, connection, result):
 def save_exception(job, connection, type, value, traceback):
     """Store job exception in a key"""
     connection.set(f'failure_callback:{job.id}', str(value), ex=60)
+
+
+def slow_success_callback(job, connection, result):
+    # TimerDeathPenalty cannot inject until a C-blocking call returns, so this
+    # deliberately exceeds the callback's one-second timeout.
+    time.sleep(1.5)
 
 
 def save_result_if_not_stopped(job, connection, result=''):

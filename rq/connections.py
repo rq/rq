@@ -1,3 +1,7 @@
+import inspect
+
+import redis.asyncio
+import redis.connection
 from redis import Connection as RedisConnection
 from redis import Redis
 
@@ -30,6 +34,40 @@ def get_connection_kwargs(connection: Redis) -> dict:
     # recognizes by identity. Pickling/repr across the process boundary creates a new object(), so
     # the child treats it as a real value and breaks; drop it so the child re-applies its default.
     return {key: value for key, value in kwargs.items() if type(value) is not object}
+
+
+def get_async_connection(connection: Redis) -> redis.asyncio.Redis:
+    """Create an asyncio client from a sync Redis connection; the client owns and closes its pool.
+
+    The connection class is mapped explicitly because TLS and Unix sockets live in the class, not the kwargs.
+    Kwargs are filtered by the async class signature because the sync pool can carry kwargs it does not accept.
+    """
+    sync_connection_class = connection.connection_pool.connection_class
+    if sync_connection_class is redis.connection.Connection:
+        async_connection_class: type[redis.asyncio.Connection] = redis.asyncio.Connection
+    elif sync_connection_class is redis.connection.SSLConnection:
+        async_connection_class = redis.asyncio.SSLConnection
+    elif sync_connection_class is redis.connection.UnixDomainSocketConnection:
+        async_connection_class = redis.asyncio.UnixDomainSocketConnection
+    else:
+        raise NotImplementedError(
+            f'{sync_connection_class.__name__} is not supported; async connections support only '
+            'TCP, TLS and Unix socket connections (Connection, SSLConnection, UnixDomainSocketConnection)'
+        )
+    # Sync-only objects: redis.retry.Retry is not redis.asyncio.retry.Retry and
+    # redis_connect_func is a sync callable.
+    dropped = {'retry', 'redis_connect_func'}
+    accepted = {
+        name
+        for klass in async_connection_class.__mro__
+        if klass is not object
+        for name in inspect.signature(klass).parameters
+    }
+    kwargs = {
+        key: value for key, value in get_connection_kwargs(connection).items() if key in accepted and key not in dropped
+    }
+    pool = redis.asyncio.ConnectionPool(connection_class=async_connection_class, **kwargs)
+    return redis.asyncio.Redis.from_pool(pool)  # type: ignore[attr-defined]  # types-redis stubs predate from_pool
 
 
 def parse_connection(connection: Redis) -> tuple[type[Redis], type[RedisConnection], dict]:
