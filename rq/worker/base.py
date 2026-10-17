@@ -887,7 +887,7 @@ class BaseWorker:
     def _start_scheduler(
         self,
         burst: bool = False,
-        logging_level: str | None = 'INFO',
+        logging_level: str | None = None,
         date_format: str = DEFAULT_LOGGING_DATE_FORMAT,
         log_format: str = DEFAULT_LOGGING_FORMAT,
     ):
@@ -900,7 +900,7 @@ class BaseWorker:
 
         Args:
             burst (bool, optional): Whether to work on burst mode. Defaults to False.
-            logging_level (str, optional): Logging level to use. Defaults to "INFO".
+            logging_level (str, optional): Logging level to use.
             date_format (str, optional): Date Format. Defaults to DEFAULT_LOGGING_DATE_FORMAT.
             log_format (str, optional): Log Format. Defaults to DEFAULT_LOGGING_FORMAT.
         """
@@ -974,7 +974,7 @@ class BaseWorker:
 
     def bootstrap(
         self,
-        logging_level: str | None = 'INFO',
+        logging_level: str | None = None,
         date_format: str = DEFAULT_LOGGING_DATE_FORMAT,
         log_format: str = DEFAULT_LOGGING_FORMAT,
     ):
@@ -984,7 +984,7 @@ class BaseWorker:
         than the full bootstrapping process.
 
         Args:
-            logging_level (str, optional): Logging level to use. Defaults to "INFO".
+            logging_level (str, optional): Logging level to use.
             date_format (str, optional): Date Format. Defaults to DEFAULT_LOGGING_DATE_FORMAT.
             log_format (str, optional): Log Format. Defaults to DEFAULT_LOGGING_FORMAT.
         """
