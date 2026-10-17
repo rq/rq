@@ -31,7 +31,7 @@ from rq.utils import (
     utcparse,
     validate_absolute_path,
 )
-from rq.worker import SimpleWorker
+from rq.worker import SimpleWorker, Worker
 from tests import RQTestCase, fixtures
 
 
@@ -168,8 +168,33 @@ class TestUtils(RQTestCase):
         """Ensure get_version works properly"""
         self.assertEqual(import_attribute('rq.utils.get_version'), get_version)
         self.assertEqual(import_attribute('rq.worker.SimpleWorker'), SimpleWorker)
+        self.assertEqual(import_attribute('rq.worker.Worker.all'), Worker.all)
         self.assertRaises(ValueError, import_attribute, 'non.existent.module')
         self.assertRaises(ValueError, import_attribute, 'rq.worker.WrongWorker')
+
+    def test_import_attribute_preserves_internal_import_error(self):
+        """Ensure import_attribute does not mask ImportError raised inside an existing module."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            pkg_dir = os.path.join(tmpdir, 'my_temp_pkg')
+            os.makedirs(pkg_dir)
+            with open(os.path.join(pkg_dir, '__init__.py'), 'w') as f:
+                f.write('')
+            with open(os.path.join(pkg_dir, 'broken_module.py'), 'w') as f:
+                f.write('import non_existent_dependency_xyz_12345\n')
+
+            sys.path.insert(0, tmpdir)
+            try:
+                with self.assertRaises(ImportError) as ctx:
+                    import_attribute('my_temp_pkg.broken_module.some_function')
+                self.assertIn('non_existent_dependency_xyz_12345', str(ctx.exception))
+            finally:
+                if tmpdir in sys.path:
+                    sys.path.remove(tmpdir)
+                sys.modules.pop('my_temp_pkg.broken_module', None)
+                sys.modules.pop('my_temp_pkg', None)
+
+
 
     def test_ceildiv_even(self):
         """When a number is evenly divisible by another ceildiv returns the quotient"""
