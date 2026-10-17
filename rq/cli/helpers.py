@@ -8,7 +8,7 @@ from enum import Enum
 from functools import partial, update_wrapper
 from json import JSONDecodeError, loads
 from shutil import get_terminal_size
-from typing import cast
+from typing import Any, cast
 
 import click
 from redis import Redis
@@ -72,7 +72,7 @@ def get_redis_from_config(settings, connection_class=Redis):
         else:
             raise ValueError('REDIS_SSL is a boolean and must be "True" or "False".')
 
-    kwargs = {
+    kwargs: dict[str, Any] = {
         'host': settings.get('REDIS_HOST', 'localhost'),
         'port': settings.get('REDIS_PORT', 6379),
         'db': settings.get('REDIS_DB', 0),
@@ -323,7 +323,7 @@ def parse_schedule(schedule_in, schedule_at):
     if schedule_in is not None:
         if schedule_at is not None:
             raise click.BadArgumentUsage("You can't specify both --schedule-in and --schedule-at")
-        return now() + timedelta(seconds=parse_timeout(schedule_in))
+        return now() + timedelta(seconds=parse_timeout(schedule_in))  # ty: ignore[invalid-argument-type]
     elif schedule_at is not None:
         return datetime.strptime(schedule_at, '%Y-%m-%dT%H:%M:%S')
 

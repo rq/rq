@@ -68,7 +68,7 @@ class WorkerPool:
         self.name: str = uuid4().hex
         self._burst: bool = True
         self._sleep: int = 0
-        self.status: self.Status = self.Status.IDLE  # type: ignore
+        self.status: self.Status = self.Status.IDLE
         self.worker_class: type[BaseWorker] = worker_class
         self.serializer: Serializer = serializer
         self.job_class: type[Job] = job_class
@@ -127,7 +127,7 @@ class WorkerPool:
             #     with UnixSignalDeathPenalty(1, HorseMonitorTimeoutException):
             #         try:
             #             # If wait4 returns, the process is dead
-            #             os.wait4(data.process.pid, 0)  # type: ignore
+            #             os.wait4(data.process.pid, 0)
             #             self.handle_dead_worker(data)
             #         except ChildProcessError:
             #             # Process is dead
@@ -193,7 +193,7 @@ class WorkerPool:
         name = uuid4().hex
         process = self.get_worker_process(name, burst=burst, _sleep=_sleep, logging_level=logging_level)
         process.start()
-        worker_data = WorkerData(name=name, pid=process.pid, process=process)  # type: ignore
+        worker_data = WorkerData(name=name, pid=process.pid, process=process)  # ty: ignore[invalid-argument-type]
         self.worker_dict[name] = worker_data
         self.log.debug('Spawned worker: %s with PID %d', name, process.pid)
 

@@ -98,7 +98,7 @@ class CronJob:
 
         if func:
             self.func: Callable | None = func
-            self.func_name: str = f'{func.__module__}.{func.__name__}'
+            self.func_name: str = f'{func.__module__}.{func.__name__}'  # ty: ignore[unresolved-attribute]
         elif func_name:
             self.func = None
             self.func_name = func_name
@@ -144,13 +144,13 @@ class CronJob:
         # Enqueue the job and record it in one round trip
         with connection.pipeline() as pipeline:
             job = queue.enqueue(self.func, *self.args, **self.kwargs, **self.job_options, pipeline=pipeline)
-            assert job.enqueued_at is not None  # narrows datetime | None for mypy
+            assert job.enqueued_at is not None  # narrows datetime | None for the type checker
             pipeline.zadd(self.job_history_key, {job.id: job.enqueued_at.timestamp()})
             pipeline.zremrangebyrank(self.job_history_key, 0, -(DEFAULT_CRON_JOB_HISTORY_LIMIT + 1))
             pipeline.expire(self.job_history_key, DEFAULT_CRON_JOB_HISTORY_TTL)
             cron_job_registry.add(self.name, pipeline, enqueue_timestamp=job.enqueued_at.timestamp())
             pipeline.execute()
-        logging.getLogger(__name__).info(f'Enqueued job {self.func.__name__} to queue {self.queue_name}')
+        logging.getLogger(__name__).info(f'Enqueued job {self.func.__name__} to queue {self.queue_name}')  # ty: ignore[unresolved-attribute]
 
         return job
 
@@ -357,7 +357,7 @@ class CronScheduler:
 
         self._cron_jobs.append(cron_job)
 
-        job_key = f'{func.__module__}.{func.__name__}'
+        job_key = f'{func.__module__}.{func.__name__}'  # ty: ignore[unresolved-attribute]
         if interval:
             self.log.info(f"Registered '{job_key}' to run on {queue_name} every {interval} seconds")
         elif cron:
@@ -725,7 +725,7 @@ def register(
 
     # Log the registration attempt (optional)
     logger = logging.getLogger(__name__)
-    job_key = f'{func.__module__}.{func.__name__}'
+    job_key = f'{func.__module__}.{func.__name__}'  # ty: ignore[unresolved-attribute]
     logger.debug(f"Cron config: Adding job '{job_key}' to registry for queue {queue_name}")
 
     return job_data
