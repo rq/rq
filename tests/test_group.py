@@ -1,6 +1,7 @@
 from time import sleep
 
 import pytest
+from redis.exceptions import WatchError
 
 from rq import Queue, SimpleWorker
 from rq.exceptions import NoSuchGroupError
@@ -22,6 +23,58 @@ class TestGroup(RQTestCase):
         assert isinstance(group, Group)
         assert len(group.get_jobs()) == 2
         q.empty()
+
+    def test_enqueue_many_defers_to_supplied_pipeline(self):
+        for transaction in (True, False):
+            with self.subTest(transaction=transaction):
+                self.connection.flushdb()
+                q = Queue(connection=self.connection)
+                group = Group.create(connection=self.connection)
+                with self.connection.pipeline(transaction=transaction) as pipe:
+                    pipe.set('before-group', 'pending')
+                    jobs = group.enqueue_many(q, [self.job_1_data, self.job_2_data], pipeline=pipe)
+                    self.assertIsNone(self.connection.get('before-group'))
+                    self.assertEqual(q.count, 0)
+                    self.assertFalse(self.connection.exists(group.key))
+                    self.assertFalse(self.connection.sismember(Group.REDIS_GROUP_KEY, group.name))
+                    for job in jobs:
+                        self.assertFalse(self.connection.exists(job.key))
+                    pipe.set('after-group', 'pending')
+                    pipe.execute()
+
+                self.assertEqual(self.connection.get('before-group'), b'pending')
+                self.assertEqual(self.connection.get('after-group'), b'pending')
+                self.assertEqual(q.get_job_ids(), [job.id for job in jobs])
+                self.assertCountEqual(group.get_jobs(), jobs)
+                self.assertTrue(self.connection.sismember(Group.REDIS_GROUP_KEY, group.name))
+
+    def test_enqueue_many_supplied_pipeline_can_be_discarded(self):
+        q = Queue(connection=self.connection)
+        group = Group.create(connection=self.connection)
+        with self.connection.pipeline() as pipe:
+            jobs = group.enqueue_many(q, [self.job_1_data], pipeline=pipe)
+            pipe.reset()
+
+        self.assertEqual(q.count, 0)
+        self.assertFalse(self.connection.exists(jobs[0].key))
+        self.assertFalse(self.connection.exists(group.key))
+        self.assertFalse(self.connection.sismember(Group.REDIS_GROUP_KEY, group.name))
+
+    def test_enqueue_many_preserves_watched_transaction(self):
+        q = Queue(connection=self.connection)
+        group = Group.create(connection=self.connection)
+        self.connection.set('watched', 'original')
+        with self.connection.pipeline() as pipe:
+            pipe.watch('watched')
+            pipe.multi()
+            jobs = group.enqueue_many(q, [self.job_1_data], pipeline=pipe)
+            self.connection.set('watched', 'changed')
+            with self.assertRaises(WatchError):
+                pipe.execute()
+
+        self.assertEqual(q.count, 0)
+        self.assertFalse(self.connection.exists(jobs[0].key))
+        self.assertFalse(self.connection.exists(group.key))
 
     def test_group_cleanup_with_no_jobs(self):
         q = Queue(connection=self.connection)
