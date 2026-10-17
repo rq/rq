@@ -41,8 +41,8 @@ class BaseRegistry:
     (unix timestamp).
     """
 
-    job_class = Job
-    death_penalty_class = UnixSignalDeathPenalty
+    job_class: type[Job] = Job
+    death_penalty_class: type[BaseDeathPenalty] = UnixSignalDeathPenalty
     key_template = FORMAT_KEY_PREFIX + ':registry:{0}'
     connection: Redis
 
@@ -61,12 +61,12 @@ class BaseRegistry:
             self.serializer = queue.serializer
         else:
             self.name = name
-            self.connection = connection  # type: ignore[assignment]
+            self.connection = connection  # ty: ignore[invalid-assignment]
             self.serializer = resolve_serializer(serializer)
 
         self.key = self.key_template.format(self.name)
         self.job_class = job_class if job_class else Job
-        self.death_penalty_class = backend_class(self, 'death_penalty_class', override=death_penalty_class)  # type: ignore[assignment]
+        self.death_penalty_class = backend_class(self, 'death_penalty_class', override=death_penalty_class)  # ty: ignore[invalid-assignment]
 
     def __len__(self):
         """Returns the number of jobs in this registry"""
@@ -145,12 +145,12 @@ class BaseRegistry:
         """
         connection = pipeline if pipeline is not None else self.connection
         job_id = job.id if isinstance(job, self.job_class) else job
-        result = connection.zrem(self.key, job_id)
+        result = connection.zrem(self.key, job_id)  # ty: ignore[invalid-argument-type]
         if delete_job:
             if isinstance(job, self.job_class):
                 job_instance = job
             else:
-                job_instance = Job.fetch(job_id, connection=connection, serializer=self.serializer)
+                job_instance = Job.fetch(job_id, connection=connection, serializer=self.serializer)  # ty: ignore[invalid-argument-type]
             job_instance.delete()
         return result
 
@@ -192,7 +192,7 @@ class BaseRegistry:
             job (Job): The Job to get the expiration
         """
         score = self.connection.zscore(self.key, job.id)
-        return datetime.fromtimestamp(score, timezone.utc)  # type: ignore[arg-type]
+        return datetime.fromtimestamp(score, timezone.utc)  # ty: ignore[invalid-argument-type]
 
     def requeue(self, job_or_id: Job | str, at_front: bool = False) -> Job:
         """Requeues the job with the given job ID.
@@ -212,7 +212,7 @@ class BaseRegistry:
             serializer = job.serializer
         else:
             serializer = self.serializer
-            job = self.job_class.fetch(job_or_id, connection=self.connection, serializer=serializer)
+            job = self.job_class.fetch(job_or_id, connection=self.connection, serializer=serializer)  # ty: ignore[invalid-argument-type]
 
         result = self.connection.zrem(self.key, job.id)
         if not result:
@@ -244,7 +244,7 @@ class BaseRegistry:
         """
         # base registry only stores job_ids as is.
         if not isinstance(entry, str):
-            entry = as_text(entry)  # type: ignore
+            entry = as_text(entry)
         return entry
 
     def cleanup(self, timestamp: float | None = None, exception_handlers: list | None = None):
@@ -353,7 +353,7 @@ class StartedJobRegistry(BaseRegistry):
         if score == -1:
             score = '+inf'
 
-        return pipeline.zadd(self.key, {execution.composite_key: score}, xx=xx)  # type: ignore
+        return pipeline.zadd(self.key, {execution.composite_key: score}, xx=xx)  # ty: ignore[invalid-return-type]
 
     def remove_execution(
         self,
@@ -422,7 +422,7 @@ class StartedJobRegistry(BaseRegistry):
         # other classes might have a different entry format
         # base registry stores just the job id
         if not isinstance(entry, str):
-            entry = as_text(entry)  # type: ignore
+            entry = as_text(entry)
         job_id, _execution_id = parse_composite_key(entry)
         return job_id
 
@@ -475,7 +475,7 @@ class FailedJobRegistry(BaseRegistry):
         score = timestamp if timestamp is not None else current_timestamp()
         self.connection.zremrangebyscore(self.key, 0, score)
 
-    def add(  # type: ignore[override]
+    def add(  # ty: ignore[invalid-method-override]
         self,
         job: Job,
         ttl=None,

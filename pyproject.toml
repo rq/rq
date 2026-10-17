@@ -52,13 +52,13 @@ scripts.rqworker = "rq.cli:worker" # TODO [v2]: Remove
 [dependency-groups]
 dev = [
   "coverage>=7.6.1",
-  "mypy>=1.18.2",
   "packaging>=24.2",
   "psutil>=7",
   "pytest>=8.3.5",
   "pytest-cov>=5",
   "ruff>=0.9.9",
   "tox>=4.24.1",
+  "ty==0.0.89",
   "types-greenlet>=3.1.0.20241221",
   "types-redis>=4.6.0.20241004",
 ]
@@ -84,20 +84,20 @@ installer = "uv"
 [tool.hatch.envs.test]
 dependencies = [
   "coverage",
-  "mypy",
   "packaging",
   "psutil",
   "pytest",
   "pytest-cov",
   "ruff",
   "tox",
+  "ty==0.0.89",
   "types-greenlet",
   "types-redis",
   "types-croniter",
 ]
 [tool.hatch.envs.test.scripts]
 cov = "pytest --cov=rq --cov-config=.coveragerc --cov-report=xml {args:tests}"
-typing = "mypy rq"
+typing = "ty check"
 
 [tool.ruff]
 target-version = "py310"
@@ -126,18 +126,10 @@ lint.isort.section-order = [
 addopts = "--strict-markers"
 markers = [ "slow", "ssl_test" ]
 
-[tool.mypy]
-allow_redefinition = true
-pretty = true
-show_error_codes = true
-show_error_context = true
-warn_redundant_casts = true
-warn_unused_ignores = true
-warn_unreachable = true
-
-[[tool.mypy.overrides]]
-module = "setproctitle.*"
-ignore_missing_imports = true
+[tool.ty]
+src.include = [ "rq" ]
+analysis.allowed-unresolved-imports = [ "setproctitle" ]
+terminal.error-on-warning = true
 
 [tool.pyright]
 reportOptionalMemberAccess = false

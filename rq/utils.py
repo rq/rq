@@ -196,7 +196,7 @@ def import_attribute(name: str) -> Callable[..., Any]:
     if module is None:
         # maybe it's a builtin
         try:
-            return __builtins__[name]  # type: ignore[index]
+            return __builtins__[name]
         except KeyError:
             raise ValueError(f'Invalid attribute name: {name}')
 
@@ -414,7 +414,7 @@ def backend_class(holder, default_name, override=None) -> type:
     if override is None:
         return getattr(holder, default_name)
     elif isinstance(override, str):
-        return import_attribute(override)  # type: ignore[return-value]
+        return import_attribute(override)  # ty: ignore[invalid-return-type]
     else:
         return override
 
