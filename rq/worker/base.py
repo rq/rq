@@ -15,7 +15,7 @@ from datetime import datetime, timedelta
 from enum import Enum
 from random import shuffle
 from types import FrameType, TracebackType
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 from uuid import uuid4
 
 if TYPE_CHECKING:
@@ -1578,7 +1578,12 @@ class BaseWorker:
             return False
         # cancel(), stop and delete() also drop the entry, but leave the job to this execution.
         status = connection.hget(job.key, 'status')
-        return status is not None and as_text(status) not in (JobStatus.CANCELED, JobStatus.STOPPED)
+        if status is None:
+            return False
+        return JobStatus(as_text(cast('bytes | str', status))) not in (
+            JobStatus.CANCELED,
+            JobStatus.STOPPED,
+        )
 
     def _discard_reclaimed_execution(self, job: Job, execution: Execution) -> None:
         """Drops this worker's record of an execution that cleanup has already reclaimed."""
