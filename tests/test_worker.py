@@ -1557,6 +1557,40 @@ class TimeoutTestCase:
 
 
 class WorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
+    def test_busy_shutdown_requests_stop(self):
+        worker = Worker('foo', connection=self.connection)
+        worker.set_state(WorkerStatus.BUSY)
+        worker.scheduler = Mock()
+        worker._shutdown_requested_date = now()
+
+        with mock.patch.object(worker, 'stop_scheduler') as stop_scheduler:
+            worker._shutdown()
+
+        self.assertTrue(worker._stop_requested)
+        self.assertIsNotNone(worker.shutdown_requested_date)
+        stop_scheduler.assert_called_once_with()
+
+    def test_idle_shutdown_unwinds_dequeue_before_stopping_scheduler(self):
+        worker = Worker(['foo', 'bar'], connection=self.connection)
+        worker.scheduler = Mock()
+        events = []
+
+        def dequeue(*args, **kwargs):
+            worker.set_state(WorkerStatus.IDLE)
+            try:
+                worker._shutdown()
+            finally:
+                events.append('dequeue unwound')
+
+        with (
+            mock.patch.object(worker, 'dequeue_job_and_maintain_ttl', side_effect=dequeue),
+            mock.patch.object(worker, 'stop_scheduler', side_effect=lambda: events.append('scheduler stopped')),
+        ):
+            worker.work()
+
+        self.assertEqual(events, ['dequeue unwound', 'scheduler stopped'])
+        self.assertFalse(worker._stop_requested)
+
     @slow
     def test_idle_worker_warm_shutdown(self):
         """worker with no ongoing job receiving single SIGTERM signal and shutting down"""
