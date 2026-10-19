@@ -99,7 +99,7 @@ class Repeat:
         interval = 0
 
         if job.repeat_intervals:
-            interval = job.repeat_intervals[0]
+            interval = cls.get_interval(0, job.repeat_intervals)
             if len(job.repeat_intervals) > 1:
                 job.repeat_intervals = job.repeat_intervals[1:]
 
