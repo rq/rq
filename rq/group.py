@@ -108,16 +108,16 @@ class Group:
         return cls.REDIS_GROUP_NAME_PREFIX + name
 
     @classmethod
-    def acquire_maintenance_lock(cls, connection: Redis) -> bool:
+    def acquire_maintenance_lock(cls, connection: Redis, timeout: int) -> bool:
         """Returns a boolean indicating whether a lock to clean all groups
-        is acquired. The lock is never released explicitly. It expires in
-        899 seconds (15 minutes - 1 second) so groups are cleaned at most
-        once per window across all workers.
+        is acquired. The lock is never released explicitly. It expires after
+        `timeout` seconds so groups are cleaned at most once per window
+        across all workers.
 
         Returns:
             lock_acquired (bool)
         """
-        return bool(connection.set(cls.REDIS_GROUP_CLEANING_KEY, 1, nx=True, ex=899))
+        return bool(connection.set(cls.REDIS_GROUP_CLEANING_KEY, 1, nx=True, ex=timeout))
 
     @classmethod
     def clean_registries(cls, connection: Redis):

@@ -177,6 +177,7 @@ class TestGroup(RQTestCase):
         first = expired_group()
         worker.clean_group_registries()
         self.assertFalse(self.connection.sismember(Group.REDIS_GROUP_KEY, first.name))
+        self.assertLessEqual(self.connection.ttl(Group.REDIS_GROUP_CLEANING_KEY), worker.maintenance_interval)
         self.assertTrue(self.connection.exists(Group.REDIS_GROUP_CLEANING_KEY))
 
         second = expired_group()
