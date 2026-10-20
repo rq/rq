@@ -1,4 +1,6 @@
+import threading
 from time import sleep
+from unittest import mock
 
 import pytest
 
@@ -185,3 +187,25 @@ class TestGroup(RQTestCase):
         worker.clean_group_registries()
         self.assertFalse(self.connection.sismember(Group.REDIS_GROUP_KEY, second.name))
         q.empty()
+
+    def test_only_one_worker_cleans_groups_per_window(self):
+        q = Queue(connection=self.connection)
+        workers = [Worker([q], connection=self.connection) for _ in range(20)]
+
+        with mock.patch.object(Group, 'clean_registries') as clean:
+            threads = [threading.Thread(target=w.clean_group_registries) for w in workers]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+            self.assertEqual(clean.call_count, 1)
+
+            self.connection.delete(Group.REDIS_GROUP_CLEANING_KEY)
+            workers[0].clean_group_registries()
+            self.assertEqual(clean.call_count, 2)
+
+    def test_group_cleaning_key_expires(self):
+        q = Queue(connection=self.connection)
+        Worker([q], connection=self.connection).clean_group_registries()
+        ttl = self.connection.ttl(Group.REDIS_GROUP_CLEANING_KEY)
+        self.assertTrue(0 < ttl <= 899)
