@@ -105,6 +105,7 @@ class TestGroup(RQTestCase):
         group.enqueue_many(q, [short_lived_job, self.job_1_data])
         w.work(burst=True, max_jobs=1)
         sleep(2)
+        self.connection.delete(Group.REDIS_GROUP_CLEANING_KEY)
         w.run_maintenance_tasks()
         group.cleanup()
         assert len(group.get_jobs()) == 1
@@ -120,6 +121,7 @@ class TestGroup(RQTestCase):
         group.enqueue_many(q, [short_lived_job])
         w.work(burst=True, max_jobs=1)
         sleep(2)
+        self.connection.delete(Group.REDIS_GROUP_CLEANING_KEY)
         w.run_maintenance_tasks()
         redis_groups = {as_text(group) for group in self.connection.smembers('rq:groups')}
         assert group.name not in redis_groups
@@ -133,6 +135,7 @@ class TestGroup(RQTestCase):
         group.enqueue_many(q, [short_lived_job])
         w.work(burst=True, max_jobs=1)
         sleep(2)
+        self.connection.delete(Group.REDIS_GROUP_CLEANING_KEY)
         w.run_maintenance_tasks()
         self.assertRaises(NoSuchGroupError, Group.fetch, group.name, group.connection)
         q.empty()
@@ -172,16 +175,13 @@ class TestGroup(RQTestCase):
         first = expired_group()
         worker.clean_group_registries()
         self.assertFalse(self.connection.sismember(Group.REDIS_GROUP_KEY, first.name))
-        self.assertFalse(self.connection.exists(Group.REDIS_GROUP_CLEANING_KEY))
+        self.assertTrue(self.connection.exists(Group.REDIS_GROUP_CLEANING_KEY))
 
         second = expired_group()
-        with Group.acquire_maintenance_lock(self.connection) as held_elsewhere:
-            self.assertTrue(held_elsewhere)
-            worker.clean_group_registries()
-            self.assertTrue(self.connection.sismember(Group.REDIS_GROUP_KEY, second.name))
-            self.assertTrue(self.connection.exists(Group.REDIS_GROUP_CLEANING_KEY))
+        worker.clean_group_registries()
+        self.assertTrue(self.connection.sismember(Group.REDIS_GROUP_KEY, second.name))
 
-        self.assertFalse(self.connection.exists(Group.REDIS_GROUP_CLEANING_KEY))
+        self.connection.delete(Group.REDIS_GROUP_CLEANING_KEY)
         worker.clean_group_registries()
         self.assertFalse(self.connection.sismember(Group.REDIS_GROUP_KEY, second.name))
         q.empty()

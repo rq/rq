@@ -487,10 +487,9 @@ class BaseWorker:
         queue, so one lock covers all workers."""
         # If there are multiple workers running, we only want 1 worker
         # to run clean_registries().
-        with Group.acquire_maintenance_lock(self.connection) as lock_acquired:
-            if lock_acquired:
-                self.log.info('Worker %s: cleaning group registries', self.name)
-                Group.clean_registries(connection=self.connection)
+        if Group.acquire_maintenance_lock(self.connection):
+            self.log.info('Worker %s: cleaning group registries', self.name)
+            Group.clean_registries(connection=self.connection)
 
     def get_redis_server_version(self):
         """Return Redis server version of connection"""
