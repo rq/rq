@@ -164,6 +164,13 @@ class TestGroup(RQTestCase):
         assert not self.connection.exists(Group.get_key(group.name))
         assert Group.all(connection=self.connection) == []
 
+    def test_group_lock_expires_before_next_maintenance(self):
+        q = Queue(connection=self.connection)
+        worker = Worker([q], connection=self.connection, maintenance_interval=30)
+        worker.clean_group_registries()
+        ttl = self.connection.ttl(Group.REDIS_GROUP_CLEANING_KEY)
+        self.assertTrue(0 < ttl < worker.maintenance_interval)
+
     def test_clean_group_registries_locks_across_workers(self):
         q = Queue(connection=self.connection)
         worker = Worker([q], connection=self.connection)
@@ -177,7 +184,6 @@ class TestGroup(RQTestCase):
         first = expired_group()
         worker.clean_group_registries()
         self.assertFalse(self.connection.sismember(Group.REDIS_GROUP_KEY, first.name))
-        self.assertLessEqual(self.connection.ttl(Group.REDIS_GROUP_CLEANING_KEY), worker.maintenance_interval)
         self.assertTrue(self.connection.exists(Group.REDIS_GROUP_CLEANING_KEY))
 
         second = expired_group()

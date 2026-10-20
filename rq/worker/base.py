@@ -484,11 +484,12 @@ class BaseWorker:
 
     def clean_group_registries(self):
         """Runs maintenance on group registries. Groups are shared by every
-        queue, so one lock covers all workers. The lock expires with the
-        maintenance interval so the next tick can take it."""
+        queue, so one lock covers all workers. The lock expires just before
+        the next maintenance tick so that tick can take it."""
         # If there are multiple workers running, we only want 1 worker
         # to run clean_registries().
-        if Group.acquire_maintenance_lock(self.connection, self.maintenance_interval):
+        lock_timeout = max(self.maintenance_interval - 1, 1)
+        if Group.acquire_maintenance_lock(self.connection, lock_timeout):
             self.log.info('Worker %s: cleaning group registries', self.name)
             Group.clean_registries(connection=self.connection)
 
