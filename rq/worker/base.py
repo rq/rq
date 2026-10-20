@@ -482,6 +482,16 @@ class BaseWorker:
                 queue.release_maintenance_lock()
         self.last_cleaned_at = now()
 
+    def clean_group_registries(self):
+        """Runs maintenance on group registries. Groups are shared by every
+        queue, so one lock covers all workers."""
+        # If there are multiple workers running, we only want 1 worker
+        # to run clean_registries().
+        with Group.acquire_maintenance_lock(self.connection) as lock_acquired:
+            if lock_acquired:
+                self.log.info('Worker %s: cleaning group registries', self.name)
+                Group.clean_registries(connection=self.connection)
+
     def get_redis_server_version(self):
         """Return Redis server version of connection"""
         if not self.redis_server_version:
@@ -1058,7 +1068,7 @@ class BaseWorker:
             if self.scheduler and (not self.scheduler._process or not self.scheduler._process.is_alive()):
                 self.scheduler.acquire_locks(auto_start=True)
         self.clean_registries()
-        Group.clean_registries(connection=self.connection)
+        self.clean_group_registries()
 
     def _pubsub_exception_handler(self, exc: Exception, pubsub: PubSub, pubsub_thread: PubSubWorkerThread) -> None:
         """

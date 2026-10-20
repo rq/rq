@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Generator, Iterable
+from contextlib import contextmanager
 from uuid import uuid4
 
 from redis import Redis
@@ -19,6 +20,7 @@ class Group:
 
     REDIS_GROUP_NAME_PREFIX = RQ_KEY_PREFIX + ':group:'
     REDIS_GROUP_KEY = RQ_KEY_PREFIX + ':groups'
+    REDIS_GROUP_CLEANING_KEY = RQ_KEY_PREFIX + ':clean_groups'
 
     def __init__(self, connection: Redis, name: str | None = None):
         self.name = name if name else str(uuid4().hex)
@@ -105,6 +107,23 @@ class Group:
     def get_key(cls, name: str) -> str:
         """Return the Redis key of the set containing a group's jobs"""
         return cls.REDIS_GROUP_NAME_PREFIX + name
+
+    @classmethod
+    @contextmanager
+    def acquire_maintenance_lock(cls, connection: Redis) -> Generator[bool]:
+        """Yields whether a lock to clean all groups was acquired and releases
+        it on exit. The lock expires in 899 seconds (15 minutes - 1 second)
+        in case the holder dies before releasing it.
+
+        Yields:
+            lock_acquired (bool)
+        """
+        acquired = bool(connection.set(cls.REDIS_GROUP_CLEANING_KEY, 1, nx=True, ex=899))
+        try:
+            yield acquired
+        finally:
+            if acquired:
+                connection.delete(cls.REDIS_GROUP_CLEANING_KEY)
 
     @classmethod
     def clean_registries(cls, connection: Redis):

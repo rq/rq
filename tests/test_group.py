@@ -2,7 +2,7 @@ from time import sleep
 
 import pytest
 
-from rq import Queue, SimpleWorker
+from rq import Queue, SimpleWorker, Worker
 from rq.exceptions import NoSuchGroupError
 from rq.group import Group
 from rq.job import Job
@@ -158,3 +158,30 @@ class TestGroup(RQTestCase):
         jobs[0].delete()
         assert not self.connection.exists(Group.get_key(group.name))
         assert Group.all(connection=self.connection) == []
+
+    def test_clean_group_registries_locks_across_workers(self):
+        q = Queue(connection=self.connection)
+        worker = Worker([q], connection=self.connection)
+
+        def expired_group():
+            group = Group.create(connection=self.connection)
+            jobs = group.enqueue_many(q, [Queue.prepare_data(say_hello)])
+            self.connection.delete(jobs[0].key)
+            return group
+
+        first = expired_group()
+        worker.clean_group_registries()
+        self.assertFalse(self.connection.sismember(Group.REDIS_GROUP_KEY, first.name))
+        self.assertFalse(self.connection.exists(Group.REDIS_GROUP_CLEANING_KEY))
+
+        second = expired_group()
+        with Group.acquire_maintenance_lock(self.connection) as held_elsewhere:
+            self.assertTrue(held_elsewhere)
+            worker.clean_group_registries()
+            self.assertTrue(self.connection.sismember(Group.REDIS_GROUP_KEY, second.name))
+            self.assertTrue(self.connection.exists(Group.REDIS_GROUP_CLEANING_KEY))
+
+        self.assertFalse(self.connection.exists(Group.REDIS_GROUP_CLEANING_KEY))
+        worker.clean_group_registries()
+        self.assertFalse(self.connection.sismember(Group.REDIS_GROUP_KEY, second.name))
+        q.empty()
