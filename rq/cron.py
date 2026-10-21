@@ -144,7 +144,7 @@ class CronJob:
         # Enqueue the job and record it in one round trip
         with connection.pipeline() as pipeline:
             job = queue.enqueue(self.func, *self.args, **self.kwargs, **self.job_options, pipeline=pipeline)
-            assert job.enqueued_at is not None  # narrows datetime | None for mypy
+            assert job.enqueued_at is not None  # narrows datetime | None for the type checker
             pipeline.zadd(self.job_history_key, {job.id: job.enqueued_at.timestamp()})
             pipeline.zremrangebyrank(self.job_history_key, 0, -(DEFAULT_CRON_JOB_HISTORY_LIMIT + 1))
             pipeline.expire(self.job_history_key, DEFAULT_CRON_JOB_HISTORY_TTL)
@@ -263,15 +263,16 @@ class CronJob:
             func_name=data['func_name'],
             # Pre-existing serialized data has no name field; fall back to func_name via __init__
             name=data.get('name', ''),
-            args=args,
-            kwargs=kwargs,
+            # args, kwargs and meta may still hold the NOT_JSON_SERIALIZABLE placeholder, kept on purpose for monitoring
+            args=args,  # type: ignore[arg-type]
+            kwargs=kwargs,  # type: ignore[arg-type]
             interval=data.get('interval'),
             cron=data.get('cron'),
             job_timeout=data.get('job_timeout'),
             result_ttl=data.get('result_ttl', DEFAULT_RESULT_TTL),
             ttl=data.get('ttl'),
             failure_ttl=data.get('failure_ttl'),
-            meta=meta,
+            meta=meta,  # type: ignore[arg-type]
             webhooks=webhooks,
         )
 

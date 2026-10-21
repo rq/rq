@@ -1854,7 +1854,8 @@ class Job:
         if pipeline is not None:
             connection.watch(*[self.key_for(dependency_id) for dependency_id in self._dependency_ids])
 
-        dependencies_ids = {_id.decode() for _id in connection.smembers(self.dependencies_key)}
+        # A WATCHed pipeline runs commands immediately, so smembers() returns the set rather than the pipeline
+        dependencies_ids = {_id.decode() for _id in connection.smembers(self.dependencies_key)}  # type: ignore[union-attr]
 
         if exclude_job_id:
             dependencies_ids.discard(exclude_job_id)

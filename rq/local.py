@@ -278,7 +278,7 @@ class LocalProxy:
             raise RuntimeError(f'no object bound to {self.__name__}')
 
     @property
-    def __dict__(self):
+    def __dict__(self):  # type: ignore[override]
         try:
             return self._get_current_object().__dict__
         except RuntimeError:
