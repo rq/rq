@@ -98,7 +98,7 @@ class Worker(BaseWorker):
                 working_time = (now() - job.started_at).total_seconds()
 
                 # Kill the job from this side if something is really wrong (interpreter lock/etc).
-                if job.timeout != -1 and working_time > (job.timeout + 60):  # type: ignore
+                if job.timeout != -1 and working_time > (job.timeout + 60):  # ty: ignore[unsupported-operator]
                     self.heartbeat(self.job_monitoring_interval + 60)
                     self.kill_horse()
                     self.wait_for_horse()
@@ -220,7 +220,7 @@ class SpawnWorker(Worker):
         """Spawns a work horse to perform the actual work using `os.posix_spawn()`."""
         os.environ['RQ_WORKER_ID'] = self.name
         os.environ['RQ_JOB_ID'] = job.id
-        os.environ['RQ_EXECUTION_ID'] = self.execution.id  # type: ignore
+        os.environ['RQ_EXECUTION_ID'] = self.execution.id  # ty: ignore[unresolved-attribute]
 
         redis_kwargs = get_connection_kwargs(self.connection)
         if 'path' in redis_kwargs:

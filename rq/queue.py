@@ -223,10 +223,10 @@ class Queue:
         # override class attribute job_class if one was passed
         if job_class is not None:
             if isinstance(job_class, str):
-                self.job_class = import_attribute(job_class)  # type: ignore[assignment]
+                self.job_class = import_attribute(job_class)  # ty: ignore[invalid-assignment]
             else:
                 self.job_class = job_class
-        self.death_penalty_class = death_penalty_class  # type: ignore[assignment]
+        self.death_penalty_class = death_penalty_class  # ty: ignore[invalid-assignment]
 
         self.serializer = resolve_serializer(serializer)
         self.redis_server_version: tuple[int, int, int] | None = None
@@ -1526,7 +1526,7 @@ class Queue:
                 if pipeline is None:
                     pipe.watch(dependents_key)
 
-                dependent_job_ids = {as_text(_id) for _id in pipe.smembers(dependents_key)}  # type: ignore[attr-defined]
+                dependent_job_ids = {as_text(_id) for _id in pipe.smembers(dependents_key)}  # ty: ignore[invalid-argument-type]
 
                 # There's no dependents
                 if not dependent_job_ids:
@@ -1790,7 +1790,7 @@ class Queue:
         job hash no longer exists (caller should dequeue again); attaches
         job_id/queue metadata to other fetch errors.
         """
-        job_cls: type[Job] = backend_class(cls, 'job_class', override=job_class)
+        job_cls: type[Job] = backend_class(cls, 'job_class', override=job_class)  # ty: ignore[invalid-assignment]
         queue = cls.from_queue_key(
             queue_key,
             connection=connection,
@@ -1806,8 +1806,8 @@ class Queue:
         except Exception as e:
             # Attach queue information on the exception for improved error
             # reporting
-            e.job_id = job_id  # type: ignore[attr-defined]
-            e.queue = queue  # type: ignore[attr-defined]
+            e.job_id = job_id  # ty: ignore[unresolved-attribute]
+            e.queue = queue  # ty: ignore[unresolved-attribute]
             raise e
         return job, queue
 

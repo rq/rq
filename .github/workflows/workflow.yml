@@ -96,7 +96,7 @@ jobs:
           files: ./coverage.xml
           fail_ci_if_error: false
 
-  mypy:
+  typing:
     runs-on: ubuntu-latest
     name: Type check
 

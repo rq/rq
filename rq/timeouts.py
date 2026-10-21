@@ -80,15 +80,15 @@ class UnixSignalDeathPenalty(BaseDeathPenalty):
 class TimerDeathPenalty(BaseDeathPenalty):
     def __init__(self, timeout, exception=JobTimeoutException, **kwargs):
         super().__init__(timeout, exception, **kwargs)
-        self._target_thread_id = threading.current_thread().ident
+        self._target_thread_id = threading.get_ident()
         self._timer = None
 
         # Monkey-patch exception with the message ahead of time
         # since PyThreadState_SetAsyncExc can only take a class
         def init_with_message(self, *args, **kwargs):  # noqa
-            super(exception, self).__init__(f'Task exceeded maximum timeout value ({timeout} seconds)')
+            super(exception, self).__init__(f'Task exceeded maximum timeout value ({timeout} seconds)')  # ty: ignore[invalid-super-argument]
 
-        self._exception.__init__ = init_with_message
+        self._exception.__init__ = init_with_message  # ty: ignore[invalid-assignment]
 
     def new_timer(self):
         """Returns a new timer since timers can only be used once."""
@@ -119,7 +119,7 @@ class TimerDeathPenalty(BaseDeathPenalty):
         """Cancels the timer."""
         if self._timeout <= 0:
             return
-        self._timer.cancel()
+        self._timer.cancel()  # ty: ignore[unresolved-attribute]
         self._timer = None
 
 

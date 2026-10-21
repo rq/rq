@@ -162,7 +162,7 @@ class ExecutionRegistry(BaseRegistry):
         score = timestamp if timestamp is not None else current_timestamp()
         self.connection.zremrangebyscore(self.key, 0, score)
 
-    def add(self, execution: Execution, ttl: int, pipeline: Pipeline, xx: bool = False) -> Any:  # type: ignore
+    def add(self, execution: Execution, ttl: int, pipeline: Pipeline, xx: bool = False) -> Any:  # ty: ignore[invalid-method-override]
         """Register an execution to registry with expiry time of now + ttl, unless it's -1 which is set to +inf
 
         Args:
@@ -180,7 +180,7 @@ class ExecutionRegistry(BaseRegistry):
         pipeline.expire(self.key, ttl + 60)
         return
 
-    def remove(self, execution: Execution, pipeline: Pipeline) -> Any:  # type: ignore
+    def remove(self, execution: Execution, pipeline: Pipeline) -> Any:  # ty: ignore[invalid-method-override]
         """Remove an execution from registry."""
         return pipeline.zrem(self.key, execution.id)
 

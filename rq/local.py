@@ -15,7 +15,7 @@ This module implements context-local objects.
 try:
     from greenlet import getcurrent as get_ident
 except ImportError:
-    from threading import get_ident  # type: ignore[assignment]
+    from threading import get_ident
 
 
 def release_local(local):
@@ -278,7 +278,7 @@ class LocalProxy:
             raise RuntimeError(f'no object bound to {self.__name__}')
 
     @property
-    def __dict__(self):
+    def __dict__(self):  # ty: ignore[invalid-assignment]
         try:
             return self._get_current_object().__dict__
         except RuntimeError:

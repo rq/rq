@@ -16,7 +16,7 @@ from .webhook import Webhook
 
 
 class job:  # noqa
-    queue_class = Queue
+    queue_class: type[Queue] = Queue
 
     def __init__(
         self,

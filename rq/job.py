@@ -118,7 +118,7 @@ class Dependency:
         self.enqueue_at_front = enqueue_at_front
 
 
-UNEVALUATED: UnevaluatedType = object()  # type: ignore[assignment]
+UNEVALUATED: UnevaluatedType = object()  # ty: ignore[invalid-assignment]
 """Sentinel value to mark that some of our lazily evaluated properties have not
 yet been evaluated.
 """
@@ -542,7 +542,7 @@ class Job:
             else:
                 return None
 
-        return self._success_callback  # type: ignore[return-value]
+        return self._success_callback  # ty: ignore[invalid-return-type]
 
     @property
     def success_callback_timeout(self) -> int:
@@ -559,7 +559,7 @@ class Job:
             else:
                 return None
 
-        return self._failure_callback  # type: ignore[return-value]
+        return self._failure_callback  # ty: ignore[invalid-return-type]
 
     @property
     def failure_callback_timeout(self) -> int:
@@ -640,7 +640,7 @@ class Job:
     def func_name(self) -> str | None:
         if self._func_name is UNEVALUATED:
             self._deserialize_data()
-        return self._func_name  # type: ignore[return-value]
+        return self._func_name  # ty: ignore[invalid-return-type]
 
     @func_name.setter
     def func_name(self, value):
@@ -662,7 +662,7 @@ class Job:
     def args(self) -> list | tuple:
         if self._args is UNEVALUATED:
             self._deserialize_data()
-        return self._args  # type: ignore[return-value]
+        return self._args  # ty: ignore[invalid-return-type]
 
     @args.setter
     def args(self, value):
@@ -673,7 +673,7 @@ class Job:
     def kwargs(self) -> dict[str, Any]:
         if self._kwargs is UNEVALUATED:
             self._deserialize_data()
-        return self._kwargs  # type: ignore[return-value]
+        return self._kwargs  # ty: ignore[invalid-return-type]
 
     @kwargs.setter
     def kwargs(self, value):
@@ -1420,7 +1420,7 @@ class Job:
         if not self.has_rate_limit:
             # If a rate-limited job is still running (has a live execution), we don't delete the execution.
             # Deleting it could free the job's slot and enqueue another job, going over the allowed concurrency.
-            self.execution_registry.delete(job=self, pipeline=connection)  # type: ignore
+            self.execution_registry.delete(job=self, pipeline=connection)  # ty: ignore[invalid-argument-type]
         if self.group_id:
             from .group import Group
 

@@ -53,7 +53,7 @@ from ..results import Result
 from ..scheduler import RQScheduler
 from ..serializers import Serializer, resolve_serializer
 from ..suspension import is_suspended
-from ..timeouts import JobTimeoutException, get_default_death_penalty_class
+from ..timeouts import BaseDeathPenalty, JobTimeoutException, get_default_death_penalty_class
 from ..utils import (
     as_text,
     compact,
@@ -117,9 +117,9 @@ class WorkerStatus(str, Enum):
 class BaseWorker:
     redis_worker_namespace_prefix = RQ_KEY_PREFIX + ':worker:'
     redis_workers_keys = worker_registration.REDIS_WORKER_KEYS
-    death_penalty_class = get_default_death_penalty_class()
-    queue_class = Queue
-    job_class = Job
+    death_penalty_class: type[BaseDeathPenalty] = get_default_death_penalty_class()
+    queue_class: type[Queue] = Queue
+    job_class: type[Job] = Job
 
     # `log_result_lifespan` controls whether "Result is kept for XXX seconds"
     # messages are logged after every job, by default they are.
@@ -184,7 +184,7 @@ class BaseWorker:
         elif inspect.ismodule(serializer):
             self._serializer_arg = serializer.__name__
         else:
-            self._serializer_arg = f'{serializer.__module__}.{serializer.__qualname__}'  # type: ignore[attr-defined]
+            self._serializer_arg = f'{serializer.__module__}.{serializer.__qualname__}'  # ty: ignore[unresolved-attribute]
         self.serializer = resolve_serializer(serializer)
         self.executions: dict[str, Execution] = {}
         self._executions: list[Execution] = []  # cached result of get_current_executions()
@@ -568,7 +568,7 @@ class BaseWorker:
         # One is sent by the pool when it calls `pool.stop_worker()` and another is sent by the OS
         # when user hits Ctrl+C. In this case if we receive the second signal within 1 second,
         # we ignore it.
-        if (now() - self._shutdown_requested_date) < timedelta(seconds=1):  # type: ignore
+        if (now() - self._shutdown_requested_date) < timedelta(seconds=1):  # ty: ignore[unsupported-operator]
             self.log.debug('Worker %s: shutdown signal ignored, received twice in less than 1 second', self.name)
             return
 
@@ -1026,7 +1026,7 @@ class BaseWorker:
 
     def set_shutdown_requested_date(self):
         """Sets the date on which the worker received a (warm) shutdown request"""
-        self.connection.hset(self.key, 'shutdown_requested_date', utcformat(self._shutdown_requested_date))
+        self.connection.hset(self.key, 'shutdown_requested_date', utcformat(self._shutdown_requested_date))  # ty: ignore[invalid-argument-type]
 
     @property
     def shutdown_requested_date(self):
@@ -1119,10 +1119,10 @@ class BaseWorker:
         """Unsubscribe from pubsub channel"""
         if self.pubsub_thread:
             self.log.info('Worker %s: unsubscribing from channel %s', self.name, self.pubsub_channel_name)
-            self.pubsub.unsubscribe()
+            self.pubsub.unsubscribe()  # ty: ignore[unresolved-attribute]
             self.pubsub_thread.stop()
             self.pubsub_thread.join(timeout=1)
-            self.pubsub.close()
+            self.pubsub.close()  # ty: ignore[unresolved-attribute]
 
     def dequeue_job_and_maintain_ttl(
         self, timeout: int | None, max_idle_time: int | None = None
@@ -1269,12 +1269,12 @@ class BaseWorker:
         if there's an OSError, just passes and `join()`'s the scheduler process,
         waiting for the process to finish.
         """
-        if self.scheduler._process and self.scheduler._process.pid:
+        if self.scheduler._process and self.scheduler._process.pid:  # ty: ignore[unresolved-attribute]
             try:
-                os.kill(self.scheduler._process.pid, signal.SIGTERM)
+                os.kill(self.scheduler._process.pid, signal.SIGTERM)  # ty: ignore[unresolved-attribute]
             except OSError:
                 pass
-            self.scheduler._process.join()
+            self.scheduler._process.join()  # ty: ignore[unresolved-attribute]
 
     def increment_failed_job_count(self, pipeline: Pipeline | None = None):
         """Used to keep the worker stats up to date in Redis.
@@ -1427,7 +1427,7 @@ class BaseWorker:
                 )
 
                 self.increment_failed_job_count(pipeline=pipeline)
-                self.increment_total_working_time(job.ended_at - job.started_at, pipeline)  # type: ignore
+                self.increment_total_working_time(job.ended_at - job.started_at, pipeline)  # ty: ignore[unsupported-operator]
 
                 try:
                     pipeline.execute()
@@ -1442,7 +1442,7 @@ class BaseWorker:
 
         with self.connection.pipeline() as pipeline:
             self.increment_failed_job_count(pipeline=pipeline)
-            self.increment_total_working_time(job.ended_at - job.started_at, pipeline)  # type: ignore
+            self.increment_total_working_time(job.ended_at - job.started_at, pipeline)  # ty: ignore[unsupported-operator]
             job._handle_retry_result(
                 queue=queue,
                 pipeline=pipeline,
@@ -1496,7 +1496,7 @@ class BaseWorker:
                         pipeline.multi()
 
                     self.increment_successful_job_count(pipeline=pipeline)
-                    self.increment_total_working_time(job.ended_at - job.started_at, pipeline)  # type: ignore
+                    self.increment_total_working_time(job.ended_at - job.started_at, pipeline)  # ty: ignore[unsupported-operator]
 
                     result_ttl = job.get_result_ttl(self.default_result_ttl)
                     if result_ttl != 0:
@@ -1670,7 +1670,7 @@ class BaseWorker:
         try:
             # The fork/spawn child boundary: the execution re-enters the child via
             # fork memory copy or the SpawnWorker re-fetch.
-            self.perform_job(job, queue, self.execution)  # type: ignore[arg-type]
+            self.perform_job(job, queue, self.execution)  # ty: ignore[invalid-argument-type]
         except:  # noqa
             os._exit(1)
         os._exit(0)
