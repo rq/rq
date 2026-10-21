@@ -186,6 +186,36 @@ class TestQueue(RQTestCase):
         job.delete()
         self.assertEqual(q.job_ids, [])
 
+    def test_get_job_ids_with_zero_length(self):
+        """A zero-length slice must not turn into a full queue read."""
+        queue = Queue(connection=self.connection)
+        job_ids = [queue.enqueue(say_hello).id for _ in range(3)]
+
+        for offset in (0, 1, -1, len(job_ids)):
+            with self.subTest(offset=offset):
+                self.assertEqual(queue.get_job_ids(offset=offset, length=0), [])
+
+        self.assertEqual(queue.job_ids, job_ids)
+
+    def test_get_jobs_with_zero_length(self):
+        """Fetching zero jobs must return an empty page."""
+        queue = Queue(connection=self.connection)
+        jobs = [queue.enqueue(say_hello) for _ in range(3)]
+
+        self.assertEqual(queue.get_jobs(length=0), [])
+        self.assertEqual(queue.jobs, jobs)
+
+    def test_get_job_slices(self):
+        """Positive lengths and the default unlimited slice keep their semantics."""
+        queue = Queue(connection=self.connection)
+        jobs = [queue.enqueue(say_hello) for _ in range(3)]
+        job_ids = [job.id for job in jobs]
+
+        for offset, length, expected in ((0, 1, slice(0, 1)), (1, 2, slice(1, 3)), (1, -1, slice(1, None))):
+            with self.subTest(offset=offset, length=length):
+                self.assertEqual(queue.get_job_ids(offset=offset, length=length), job_ids[expected])
+                self.assertEqual(queue.get_jobs(offset=offset, length=length), jobs[expected])
+
     def test_compact(self):
         """Queue.compact() removes non-existing jobs."""
         q = Queue(connection=self.connection)
