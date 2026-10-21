@@ -10,6 +10,8 @@ import time
 from random import shuffle
 from typing import TYPE_CHECKING
 
+from redis import SSLConnection
+
 from ..callbacks import execute_stopped_callback
 from ..connections import get_connection_kwargs
 from ..defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT, DEFAULT_WORKER_TTL
@@ -223,6 +225,9 @@ class SpawnWorker(Worker):
         redis_kwargs = get_connection_kwargs(self.connection)
         if 'path' in redis_kwargs:
             redis_kwargs['unix_socket_path'] = redis_kwargs.pop('path')
+        if issubclass(self.connection.connection_pool.connection_class, SSLConnection):
+            # Redis() only uses the ssl_* settings, and SSLConnection, when ssl is set
+            redis_kwargs['ssl'] = True
         if redis_kwargs.get('retry'):
             # Remove retry from connection kwargs so they can be embedded in the child source
             del redis_kwargs['retry']

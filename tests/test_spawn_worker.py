@@ -10,7 +10,7 @@ from multiprocessing import Process
 from pathlib import Path
 from unittest import mock
 
-from redis import Redis, UnixDomainSocketConnection
+from redis import Redis, SSLConnection, UnixDomainSocketConnection
 
 from rq import Queue
 from rq.connections import get_connection_kwargs
@@ -19,7 +19,7 @@ from rq.registry import FailedJobRegistry, FinishedJobRegistry
 from rq.results import Result
 from rq.serializers import JSONSerializer
 from rq.worker import SpawnWorker
-from tests import RQTestCase, slow
+from tests import RQTestCase, find_empty_redis_database, slow, ssl_test
 from tests.fixtures import (
     CustomDeathPenalty,
     CustomJob,
@@ -50,6 +50,18 @@ class TestWorker(RQTestCase):
         registry = queue.started_job_registry
         self.assertEqual(registry.get_job_ids(), [])
 
+    @ssl_test
+    def test_work_with_ssl(self):
+        """The work horse connects over SSL when the worker does."""
+        connection = find_empty_redis_database(ssl=True)
+        queue = Queue('foo', connection=connection)
+        job = queue.enqueue(say_hello, name='Frank')
+        SpawnWorker([queue], connection=connection).work(burst=True)
+
+        registry = FinishedJobRegistry(queue=queue)
+        self.assertEqual(registry.get_job_ids(), [job.id])
+        connection.flushdb()
+
     def test_horse_rebuilds_unix_socket_connection(self):
         connection = Redis(unix_socket_path='/tmp/redis.sock', db=5, password='test-password')
         queue = Queue('foo', connection=connection)
@@ -74,6 +86,28 @@ class TestWorker(RQTestCase):
         self.assertEqual(child_kwargs['db'], 5)
         self.assertEqual(child_kwargs['password'], 'test-password')
         self.assertEqual(connection.connection_pool.connection_kwargs, original_kwargs)
+
+    def test_horse_rebuilds_ssl_connection(self):
+        connection = Redis.from_url('rediss://localhost:6380/5?ssl_cert_reqs=none')
+        queue = Queue('foo', connection=connection)
+        worker = SpawnWorker([queue], connection=connection, prepare_for_work=False)
+        worker.execution = mock.Mock(id='execution-id')
+        job = Job.create(say_hello, connection=connection)
+
+        with mock.patch('os.posix_spawn', return_value=123) as spawn:
+            worker.fork_work_horse(job, queue)
+
+        child_source = spawn.call_args.args[1][2]
+        with mock.patch.object(SpawnWorker, 'find_by_key', return_value=None) as find_worker:
+            with self.assertRaises(SystemExit):
+                exec(child_source, {})
+
+        child_connection = find_worker.call_args.kwargs['connection']
+        self.assertIs(child_connection.connection_pool.connection_class, SSLConnection)
+        child_kwargs = child_connection.connection_pool.connection_kwargs
+        self.assertEqual(child_kwargs['port'], 6380)
+        self.assertEqual(child_kwargs['db'], 5)
+        self.assertEqual(child_kwargs['ssl_cert_reqs'], 'none')
 
     def test_filters_non_serializable_connection_kwargs(self):
         """SpawnWorker strips connection-local runtime objects before rebuilding Redis in the child.
