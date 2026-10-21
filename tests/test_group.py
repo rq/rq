@@ -90,6 +90,16 @@ class TestGroup(RQTestCase):
         assert job.id not in redis_jobs
         assert job not in group.get_jobs()
 
+    def test_cleanup_checks_alive_jobs_with_one_exists_call(self):
+        q = Queue(connection=self.connection)
+        group = Group.create(connection=self.connection)
+        group.enqueue_many(q, [self.job_1_data, self.job_2_data])
+        with mock.patch.object(self.connection, 'exists', wraps=self.connection.exists) as exists:
+            group.cleanup()
+        exists.assert_called_once()
+        self.assertEqual(len(exists.call_args.args), 2)
+        self.assertEqual(len(group.get_jobs()), 2)
+
     def test_group_added_to_registry(self):
         q = Queue(connection=self.connection)
         group = Group.create(connection=self.connection)
@@ -170,6 +180,18 @@ class TestGroup(RQTestCase):
         worker.clean_group_registries()
         ttl = self.connection.ttl(Group.REDIS_GROUP_CLEANING_KEY)
         self.assertTrue(0 < ttl < worker.maintenance_interval)
+
+    def test_group_lock_with_float_maintenance_interval(self):
+        q = Queue(connection=self.connection)
+        worker = Worker([q], connection=self.connection, maintenance_interval=30.0)
+        worker.clean_group_registries()
+        self.assertEqual(self.connection.ttl(Group.REDIS_GROUP_CLEANING_KEY), 29)
+
+    def test_group_lock_with_zero_maintenance_interval(self):
+        q = Queue(connection=self.connection)
+        worker = Worker([q], connection=self.connection, maintenance_interval=0)
+        worker.clean_group_registries()
+        self.assertTrue(0 < self.connection.pttl(Group.REDIS_GROUP_CLEANING_KEY) <= 1000)
 
     def test_clean_group_registries_locks_across_workers(self):
         q = Queue(connection=self.connection)

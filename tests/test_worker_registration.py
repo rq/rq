@@ -80,6 +80,20 @@ class TestWorkerRegistry(RQTestCase):
         self.assertFalse(redis.sismember(worker.redis_workers_keys, worker.key))
         self.assertFalse(redis.sismember(REDIS_WORKER_KEYS, worker.key))
 
+    def test_clean_registry_checks_alive_workers_with_one_exists_call(self):
+        queue = Queue(name='foo', connection=self.connection)
+        workers = [Worker([queue], connection=self.connection) for _ in range(3)]
+        for worker in workers:
+            worker.register_birth()
+
+        with patch.object(self.connection, 'exists', wraps=self.connection.exists) as exists:
+            clean_worker_registry(queue)
+
+        exists.assert_called_once()
+        self.assertEqual(len(exists.call_args.args), 3)
+        for worker in workers:
+            self.assertTrue(self.connection.sismember(REDIS_WORKER_KEYS, worker.key))
+
     def test_clean_large_registry(self):
         """
         clean_registry() splits invalid_keys into multiple lists for set removal to avoid sending more than redis can

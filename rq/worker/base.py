@@ -488,7 +488,7 @@ class BaseWorker:
         the next maintenance tick so that tick can take it."""
         # If there are multiple workers running, we only want 1 worker
         # to run clean_registries().
-        lock_timeout = max(self.maintenance_interval - 1, 1)
+        lock_timeout = max(int(self.maintenance_interval) - 1, 1)
         if Group.acquire_maintenance_lock(self.connection, lock_timeout):
             self.log.info('Worker %s: cleaning group registries', self.name)
             Group.clean_registries(connection=self.connection)

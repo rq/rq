@@ -11,7 +11,7 @@ from .defaults import RQ_KEY_PREFIX
 from .exceptions import NoSuchGroupError
 from .job import Job
 from .queue import EnqueueData
-from .utils import as_text
+from .utils import as_text, missing_keys
 
 
 class Group:
@@ -38,21 +38,10 @@ class Group:
     def cleanup(self):
         """Delete jobs from the group's job registry that have been deleted or expired from Redis.
         We assume while running this that alive jobs have all been fetched from Redis in fetch_jobs method"""
-        with self.connection.pipeline() as pipe:  # Use a new pipeline
-            job_ids = [as_text(job) for job in list(self.connection.smembers(self.key))]
-            if not job_ids:
-                return
-            expired_job_ids = []
-            for job in job_ids:
-                pipe.exists(Job.key_for(job))
-            results = pipe.execute()
-
-            for i, key_exists in enumerate(results):
-                if not key_exists:
-                    expired_job_ids.append(job_ids[i])
-            if expired_job_ids:
-                pipe.srem(self.key, *expired_job_ids)
-                pipe.execute()
+        job_ids_by_key = {Job.key_for(as_text(job)): as_text(job) for job in self.connection.smembers(self.key)}
+        expired_job_ids = [job_ids_by_key[key] for key in missing_keys(self.connection, list(job_ids_by_key))]
+        if expired_job_ids:
+            self.connection.srem(self.key, *expired_job_ids)
 
     def enqueue_many(self, queue: Queue, job_datas: Iterable[EnqueueData], pipeline: Pipeline | None = None):
         pipe = pipeline if pipeline else self.connection.pipeline()
