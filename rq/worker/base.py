@@ -552,8 +552,6 @@ class BaseWorker:
             if self.scheduler:
                 self.stop_scheduler()
         else:
-            if self.scheduler:
-                self.stop_scheduler()
             raise StopRequested()
 
     def request_force_stop(self, signum: int, frame: FrameType | None):
