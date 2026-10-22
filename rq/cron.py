@@ -143,7 +143,8 @@ class CronJob:
         queue = Queue(self.queue_name, connection=connection)
         # Enqueue the job and record it in one round trip
         with connection.pipeline() as pipeline:
-            job = queue.enqueue(self.func, *self.args, **self.kwargs, **self.job_options, pipeline=pipeline)
+            # Pass args and kwargs explicitly, so the function's kwargs can have the same names as job options
+            job = queue.enqueue(self.func, args=self.args, kwargs=self.kwargs, **self.job_options, pipeline=pipeline)
             assert job.enqueued_at is not None  # narrows datetime | None for mypy
             pipeline.zadd(self.job_history_key, {job.id: job.enqueued_at.timestamp()})
             pipeline.zremrangebyrank(self.job_history_key, 0, -(DEFAULT_CRON_JOB_HISTORY_LIMIT + 1))

@@ -3,11 +3,11 @@ from unittest.mock import patch
 
 from rq import Queue, cron_job_registry, utils
 from rq.cron import CronJob, CronScheduler, get_cron_job_history_key, get_cron_job_ids
-from rq.defaults import DEFAULT_CRON_JOB_HISTORY_TTL
+from rq.defaults import DEFAULT_CRON_JOB_HISTORY_TTL, DEFAULT_RESULT_TTL
 from rq.utils import NOT_JSON_SERIALIZABLE
 from rq.webhook import Webhook
 from tests import RQTestCase, system_timezone
-from tests.fixtures import say_hello
+from tests.fixtures import echo, say_hello
 
 
 class TestCronJob(RQTestCase):
@@ -174,6 +174,17 @@ class TestCronJob(RQTestCase):
         self.assertEqual(job.timeout, timeout_value)
         # Verify job can be executed without TypeError
         job.perform()
+
+    def test_enqueue_passes_kwargs_to_the_function(self):
+        """Test that kwargs are passed to the function, even when their names are also job options"""
+        kwargs = {'description': 'nightly', 'ttl': 15, 'result_ttl': 10}
+        cron_job = CronJob(func=echo, queue_name=self.queue.name, args=('Hello',), kwargs=kwargs, interval=60)
+        job = cron_job.enqueue(self.connection)
+
+        self.assertEqual(job.kwargs, kwargs)
+        self.assertIsNone(job.ttl)
+        self.assertEqual(job.result_ttl, DEFAULT_RESULT_TTL)
+        self.assertEqual(job.perform(), (('Hello',), kwargs))
 
     def test_enqueue_records_job_history(self):
         """enqueue() adds the spawned job to the history ZSET, queryable newest first"""
