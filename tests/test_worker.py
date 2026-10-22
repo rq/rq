@@ -188,6 +188,7 @@ class TestWorker(RQTestCase):
         mock_client_setname.assert_called_once_with(w.name)
         self.assertEqual(w.ip_address, 'unknown')
 
+    @min_redis_version((6, 2, 0))
     def test_create_worker_reads_own_address_with_client_info(self):
         """Worker creation asks for its own connection instead of listing every client."""
         q = Queue('foo', connection=self.connection)
