@@ -10,7 +10,7 @@ from multiprocessing import Process
 from pathlib import Path
 from unittest import mock
 
-from redis import Redis, SSLConnection, UnixDomainSocketConnection
+from redis import Redis, SSLConnection, UnixDomainSocketConnection, UsernamePasswordCredentialProvider
 
 from rq import Queue
 from rq.connections import get_connection_kwargs
@@ -108,6 +108,26 @@ class TestWorker(RQTestCase):
         self.assertEqual(child_kwargs['port'], 6380)
         self.assertEqual(child_kwargs['db'], 5)
         self.assertEqual(child_kwargs['ssl_cert_reqs'], 'none')
+
+    def test_horse_rebuilds_credential_provider_connection(self):
+        credential_provider = UsernamePasswordCredentialProvider('test-user', 'test-password')
+        connection = Redis(db=5, credential_provider=credential_provider)
+        queue = Queue('foo', connection=connection)
+        worker = SpawnWorker([queue], connection=connection, prepare_for_work=False)
+        worker.execution = mock.Mock(id='execution-id')
+        job = Job.create(say_hello, connection=connection)
+
+        with mock.patch('os.posix_spawn', return_value=123) as spawn:
+            worker.fork_work_horse(job, queue)
+
+        child_source = spawn.call_args.args[1][2]
+        with mock.patch.object(SpawnWorker, 'find_by_key', return_value=None) as find_worker:
+            with self.assertRaises(SystemExit):
+                exec(child_source, {})
+
+        child_kwargs = find_worker.call_args.kwargs['connection'].connection_pool.connection_kwargs
+        self.assertEqual(child_kwargs['db'], 5)
+        self.assertEqual(child_kwargs['credential_provider'].get_credentials(), ('test-user', 'test-password'))
 
     def test_filters_non_serializable_connection_kwargs(self):
         """SpawnWorker strips connection-local runtime objects before rebuilding Redis in the child.
@@ -220,6 +240,17 @@ class TestWorker(RQTestCase):
         queue = Queue('foo', connection=self.connection)
         queue.enqueue(say_hello)
         worker = SpawnWorker([queue], exception_handlers=[lambda job, *exc_info: True])
+
+        with self.assertRaises((pickle.PicklingError, AttributeError)):
+            worker.work(burst=True)
+        self.assertEqual(queue.count, 1)
+
+    def test_rejects_unpicklable_connection_kwargs_before_dequeue(self):
+        db = self.connection.connection_pool.connection_kwargs['db']
+        connection = Redis(db=db, redis_connect_func=lambda conn: conn.on_connect())
+        queue = Queue('foo', connection=connection)
+        queue.enqueue(say_hello)
+        worker = SpawnWorker([queue], connection=connection)
 
         with self.assertRaises((pickle.PicklingError, AttributeError)):
             worker.work(burst=True)
