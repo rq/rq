@@ -215,6 +215,21 @@ class TestWorker(RQTestCase):
         mock_client_list.assert_called_once()
         self.assertNotEqual(w.ip_address, 'unknown')
 
+    def test_create_worker_with_client_list_missing_own_connection(self):
+        """Worker creation falls back to unknown IP when CLIENT LIST does not include its own name."""
+        q = Queue('foo', connection=self.connection)
+
+        with mock.patch.object(
+            self.connection,
+            'client_info',
+            side_effect=redis.exceptions.ResponseError('unknown subcommand'),
+        ):
+            with mock.patch.object(self.connection, 'client_list', return_value=[]):
+                with pytest.warns(Warning, match='CLIENT LIST command not supported'):
+                    w = Worker([q], connection=self.connection)
+
+        self.assertEqual(w.ip_address, 'unknown')
+
     def test_create_worker_with_unsupported_client_setname(self):
         """Worker creation falls back to unknown IP when CLIENT SETNAME is unsupported."""
         q = Queue('foo', connection=self.connection)
