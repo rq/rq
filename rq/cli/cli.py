@@ -20,7 +20,7 @@ from rq.cli.helpers import (
 )
 
 # from rq.cli.pool import pool
-from rq.exceptions import InvalidJobOperationError
+from rq.exceptions import InvalidJobOperation, NoSuchJobError
 from rq.job import JobStatus
 from rq.logutils import blue
 from rq.registry import FailedJobRegistry, clean_registries
@@ -92,7 +92,7 @@ def requeue(cli_config, queue, all, job_class, serializer, job_ids, **options):
         for job_id in job_ids:
             try:
                 failed_job_registry.requeue(job_id)
-            except InvalidJobOperationError:
+            except (InvalidJobOperation, NoSuchJobError):
                 fail_count += 1
 
     if fail_count > 0:
