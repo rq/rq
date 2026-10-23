@@ -150,6 +150,22 @@ class TestDependencies(RQTestCase):
         self.assertEqual(jobs[0].get_status(), JobStatus.QUEUED)
         q.empty()
 
+    def test_enqueue_many_deferred_job_ttl(self):
+        """enqueue_many() makes deferred jobs expire after their ttl, as enqueue() does"""
+        q = Queue(connection=self.connection)
+        parent_job = q.enqueue(say_hello)
+        jobs = q.enqueue_many(
+            [
+                Queue.prepare_data(say_hello, depends_on=parent_job, ttl=100),
+                Queue.prepare_data(say_hello, depends_on=parent_job),
+            ]
+        )
+        self.assertEqual(jobs[0].get_status(), JobStatus.DEFERRED)
+        self.assertTrue(0 < self.connection.ttl(jobs[0].key) <= 100)
+        self.assertTrue(0 < self.connection.ttl(jobs[0].dependencies_key) <= 100)
+        # A job without ttl doesn't expire
+        self.assertEqual(self.connection.ttl(jobs[1].key), -1)
+
     def test_dependency_list_in_depends_on(self):
         """Enqueue with Dependency list in depends_on"""
         q = Queue(connection=self.connection)
