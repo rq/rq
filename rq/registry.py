@@ -650,7 +650,8 @@ class ScheduledJobRegistry(BaseRegistry):
             scheduled_datetime = scheduled_datetime.replace(tzinfo=tz)
 
         timestamp = calendar.timegm(scheduled_datetime.utctimetuple())
-        return self.connection.zadd(self.key, {job.id: timestamp})
+        connection = pipeline if pipeline is not None else self.connection
+        return connection.zadd(self.key, {job.id: timestamp})
 
     def remove_jobs(self, timestamp: int | None = None, pipeline: Pipeline | None = None):
         """Remove jobs whose timestamp is in the past from registry.
