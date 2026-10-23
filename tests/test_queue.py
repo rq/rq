@@ -180,6 +180,8 @@ class TestQueue(RQTestCase):
         q = Queue(connection=self.connection)
         self.assertEqual(q.jobs, [])
         job = q.enqueue(say_hello)
+        self.assertEqual(q.get_job_ids(length=0), [])
+        self.assertEqual(q.get_jobs(length=0), [])
         self.assertEqual(q.jobs, [job])
 
         # Deleting job removes it from queue

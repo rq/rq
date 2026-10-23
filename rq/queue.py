@@ -407,6 +407,8 @@ class Queue:
     def get_job_ids(self, offset: int = 0, length: int = -1) -> list[str]:
         """Returns a slice of job IDs in the queue.
 
+        A length of 0 returns an empty list.
+
         Args:
             offset (int, optional): The offset. Defaults to 0.
             length (int, optional): The slice length. Defaults to -1 (last element).
@@ -414,6 +416,9 @@ class Queue:
         Returns:
             _type_: _description_
         """
+        if length == 0:
+            return []
+
         start = offset
         if length >= 0:
             end = offset + (length - 1)
