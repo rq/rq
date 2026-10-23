@@ -696,8 +696,13 @@ class Queue:
 
                     pipe.multi()
 
+                    # As in Job.dependencies_are_met(), a failed dependency is met if the job allows failures
+                    met_statuses = [JobStatus.FINISHED]
+                    if job.allow_dependency_failures:
+                        met_statuses.append(JobStatus.FAILED)
+
                     for dependency in dependencies:
-                        if dependency.get_status(refresh=False) != JobStatus.FINISHED:
+                        if dependency.get_status(refresh=False) not in met_statuses:
                             # NOTE: If the following code changes local variables, those values probably have
                             # to be set back to their original values in the handling of WatchError below!
                             job.set_status(JobStatus.DEFERRED, pipeline=pipe)
