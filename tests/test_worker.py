@@ -420,6 +420,28 @@ class TestWorker(RQTestCase):
         worker.maintain_heartbeats(job, execution)
         self.assertFalse(self.connection.exists(job.key))
 
+    def test_maintain_heartbeats_expires_recreated_worker_key(self):
+        """worker.maintain_heartbeats() sets a TTL on the worker key it recreates"""
+        queue = Queue(connection=self.connection)
+        worker = Worker([queue], connection=self.connection)
+        worker.register_birth()
+        job = queue.enqueue(say_hello)
+        execution = worker.prepare_execution(job)
+        worker.prepare_job_execution(job)
+        self.connection.delete(worker.key)
+
+        serialize = worker.serialize
+
+        def expire_key_then_serialize():
+            # The worker stalls past the key's TTL again before recreating it
+            self.connection.delete(worker.key)
+            return serialize()
+
+        with mock.patch.object(worker, 'serialize', side_effect=expire_key_then_serialize):
+            worker.maintain_heartbeats(job, execution)
+
+        self.assertGreater(self.connection.ttl(worker.key), 0)
+
     def test_maintain_heartbeats_working_time_from_started_at(self):
         """maintain_heartbeats() measures working time from job.started_at, not execution.created_at"""
         queue = Queue(connection=self.connection)

@@ -1240,8 +1240,9 @@ class BaseWorker:
 
     def maintain_heartbeats(self, job: Job, execution: Execution):
         """Updates worker, execution and job's last heartbeat fields."""
+        worker_ttl = self.job_monitoring_interval + 60
         with self.connection.pipeline() as pipeline:
-            self.heartbeat(self.job_monitoring_interval + 60, pipeline=pipeline)
+            self.heartbeat(worker_ttl, pipeline=pipeline)
             working_time = (now() - job.started_at).total_seconds() if job.started_at else 0.0
             ttl = int(self.get_heartbeat_ttl(job, working_time=working_time))
 
@@ -1266,9 +1267,11 @@ class BaseWorker:
                 pipeline.delete(job.key)
 
             # like above, check if the worker's hash expired before `self.heartbeat` was able to
-            # update the expiration
+            # update the expiration. The hash can expire again before this pipeline runs, so the
+            # recreated hash needs its own TTL or it never expires.
             if results[0] == 1:
                 pipeline.hset(self.key, mapping=self.serialize())
+                pipeline.expire(self.key, worker_ttl)
 
             pipeline.execute()
 
