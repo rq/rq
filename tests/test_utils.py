@@ -23,6 +23,7 @@ from rq.utils import (
     import_queue_class,
     import_worker_class,
     is_nonstring_iterable,
+    missing_keys,
     normalize_config_path,
     parse_timeout,
     split_list,
@@ -36,6 +37,14 @@ from tests import RQTestCase, fixtures
 
 
 class TestUtils(RQTestCase):
+    def test_missing_keys(self):
+        self.connection.set('rq:tmp:alive', 1)
+        with patch.object(self.connection, 'exists', wraps=self.connection.exists) as exists:
+            self.assertEqual(missing_keys(self.connection, ['rq:tmp:alive']), [])
+        exists.assert_called_once()
+        self.assertEqual(missing_keys(self.connection, ['rq:tmp:alive', 'rq:tmp:gone']), ['rq:tmp:gone'])
+        self.assertEqual(missing_keys(self.connection, []), [])
+
     def test_parse_timeout(self):
         """Ensure function parse_timeout works correctly"""
         self.assertEqual(12, parse_timeout(12))
