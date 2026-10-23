@@ -685,8 +685,7 @@ class TestRateLimitEnqueue(RQTestCase):
         self.assertEqual(registry.get_allowed_job_ids(), [waiting_job.id])
 
     def test_release_after_aborted_immediate_repeat(self):
-        """If the success transaction aborts after scheduling the last immediate repeat, the
-        retry deletes the job (result_ttl=0) and still promotes the next rate_limited job."""
+        """An aborted success transaction preserves the repeat and its rate limit slot."""
         rate_limit = RateLimit(key='test', concurrency=1)
         job = self.queue.enqueue(say_hello, rate_limit=rate_limit, result_ttl=0, repeat=Repeat(times=1))
         waiting_job = self.queue.enqueue(say_hello, rate_limit=rate_limit)
@@ -707,9 +706,18 @@ class TestRateLimitEnqueue(RQTestCase):
             SimpleWorker([self.queue], connection=self.connection).work(max_jobs=1)
 
         self.assertEqual(calls['n'], 1)
+        job.refresh()
+        self.assertEqual(job.repeats_left, 0)
+        self.assertEqual(job.get_status(), JobStatus.QUEUED)
+        self.assertEqual(self.queue.get_job_ids(), [job.id])
+        self.assertEqual(waiting_job.get_status(), JobStatus.RATE_LIMITED)
+        registry = RateLimitRegistry(key='test', connection=self.connection)
+        self.assertEqual(registry.get_allowed_job_ids(), [job.id])
+
+        SimpleWorker([self.queue], connection=self.connection).work(max_jobs=1)
+
         self.assertFalse(self.connection.exists(job.key))
         self.assertEqual(waiting_job.get_status(), JobStatus.QUEUED)
-        registry = RateLimitRegistry(key='test', connection=self.connection)
         self.assertEqual(registry.get_allowed_job_ids(), [waiting_job.id])
 
     def test_release_on_failure(self):
