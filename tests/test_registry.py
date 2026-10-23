@@ -8,7 +8,7 @@ import pytest
 from rq.defaults import DEFAULT_FAILURE_TTL
 from rq.exceptions import AbandonedJobError, InvalidJobOperation
 from rq.executions import Execution
-from rq.job import Dependency, Job, JobStatus, requeue_job
+from rq.job import Dependency, Job, JobStatus, Retry, requeue_job
 from rq.queue import Queue
 from rq.registry import (
     BaseRegistry,
@@ -22,7 +22,7 @@ from rq.registry import (
 )
 from rq.serializers import JSONSerializer
 from rq.utils import as_text, current_timestamp, now
-from rq.worker import Worker
+from rq.worker import SimpleWorker, Worker
 from tests import RQTestCase
 from tests.fixtures import div_by_zero, say_hello
 
@@ -960,6 +960,85 @@ class TestStartedJobRegistry(RQTestCase):
 
         self.assertFalse(job_not_to_be_executed.is_finished)
         self.assertNotIn(job_not_to_be_executed, finished_job_registry)
+
+    def _start(self, worker):
+        """What a worker does before running a job: dequeue it, prepare its execution, mark it started."""
+        job, _queue = worker.dequeue_job_and_maintain_ttl(None)
+        execution = worker.prepare_execution(job)
+        worker.prepare_job_execution(job, remove_from_intermediate_queue=True)
+        job.started_at = now()
+        return job, execution
+
+    def _reclaim(self, job, execution):
+        """Expire the execution's lease, run the cleanup every worker does, and let worker B take the job."""
+        self.connection.zadd(self.registry.key, {execution.composite_key: 1}, xx=True)
+        self.registry.cleanup()
+        worker_b = SimpleWorker([self.queue], connection=self.connection)
+        return self._start(worker_b)
+
+    def test_a_reclaimed_job_ignores_its_previous_execution(self):
+        self.queue.enqueue(say_hello, retry=Retry(max=1))
+        worker_a = SimpleWorker([self.queue], connection=self.connection)
+        job, execution_a = self._start(worker_a)
+        _job_b, execution_b = self._reclaim(job, execution_a)
+
+        # Worker A wakes up and reports its attempt as finished.
+        worker_a.handle_execution_ended(job, self.queue, job.success_callback_timeout)
+        settled = worker_a.handle_job_success(
+            job=job, queue=self.queue, started_job_registry=self.registry, execution=execution_a
+        )
+
+        # The job is still worker B's, which is running it.
+        self.assertIs(settled, False)
+        self.assertEqual(Job.fetch(job.id, connection=self.connection).get_status(), JobStatus.STARTED)
+        self.assertIn((job.id, execution_b.id), self.registry.get_job_and_execution_ids())
+        self.assertNotIn(job.id, FinishedJobRegistry(connection=self.connection))
+        self.assertEqual(self.connection.ttl(job.key), -1)
+
+    def test_a_reclaimed_job_is_not_failed_or_retried_by_its_previous_execution(self):
+        self.queue.enqueue(say_hello, retry=Retry(max=2))
+        worker_a = SimpleWorker([self.queue], connection=self.connection)
+        job, execution_a = self._start(worker_a)
+        _job_b, execution_b = self._reclaim(job, execution_a)
+
+        # Worker A wakes up and reports its attempt as failed.
+        worker_a.handle_execution_ended(job, self.queue, job.failure_callback_timeout)
+        worker_a.handle_job_failure(job, self.queue, started_job_registry=self.registry, execution=execution_a)
+
+        reloaded = Job.fetch(job.id, connection=self.connection)
+        self.assertEqual(reloaded.get_status(), JobStatus.STARTED)
+        self.assertNotIn(job.id, self.queue.get_job_ids())
+        self.assertNotIn(job.id, FailedJobRegistry(connection=self.connection))
+        self.assertIn((job.id, execution_b.id), self.registry.get_job_and_execution_ids())
+
+    def test_a_canceled_running_job_still_records_its_result(self):
+        """cancel() also removes the execution from the registry, but doesn't hand the job on."""
+        self.queue.enqueue(say_hello)
+        worker = SimpleWorker([self.queue], connection=self.connection)
+        job, execution = self._start(worker)
+        job.cancel()
+
+        worker.handle_execution_ended(job, self.queue, job.success_callback_timeout)
+        settled = worker.handle_job_success(
+            job=job, queue=self.queue, started_job_registry=self.registry, execution=execution
+        )
+
+        self.assertIs(settled, True)
+        self.assertIsNotNone(job.latest_result())
+
+    def test_a_current_execution_still_settles_the_job(self):
+        self.queue.enqueue(say_hello)
+        worker = SimpleWorker([self.queue], connection=self.connection)
+        job, execution = self._start(worker)
+
+        worker.handle_execution_ended(job, self.queue, job.success_callback_timeout)
+        settled = worker.handle_job_success(
+            job=job, queue=self.queue, started_job_registry=self.registry, execution=execution
+        )
+
+        self.assertIs(settled, True)
+        self.assertEqual(Job.fetch(job.id, connection=self.connection).get_status(), JobStatus.FINISHED)
+        self.assertNotIn(job.id, self.registry)
 
     def test_warnings_on_add_remove_and_exception(self):
         """Test backwards compatibility of the .add and .remove methods for
