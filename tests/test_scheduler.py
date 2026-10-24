@@ -618,6 +618,29 @@ class TestQueue(RQTestCase):
         self.assertEqual(len(queue), 1)
         self.assertEqual(len(registry), 0)
 
+    def test_enqueue_at_with_pipeline(self):
+        """queue.enqueue_at() with a pipeline schedules the job when the pipeline is executed"""
+        queue = Queue(connection=self.connection)
+        registry = ScheduledJobRegistry(queue=queue)
+        scheduler = RQScheduler([queue], connection=self.connection)
+        scheduler.acquire_locks()
+
+        # Discarding the pipeline writes nothing
+        pipeline = self.connection.pipeline()
+        job = queue.enqueue_at(datetime(2019, 1, 1, tzinfo=timezone.utc), say_hello, pipeline=pipeline)
+        pipeline.reset()
+        self.assertFalse(self.connection.exists(job.key))
+        self.assertEqual(len(registry), 0)
+
+        # A scheduler run before the pipeline is executed doesn't lose the job
+        pipeline = self.connection.pipeline()
+        job = queue.enqueue_at(datetime(2019, 1, 1, tzinfo=timezone.utc), say_hello, pipeline=pipeline)
+        scheduler.enqueue_scheduled_jobs()
+        pipeline.execute()
+        self.assertIn(job.id, registry)
+        scheduler.enqueue_scheduled_jobs()
+        self.assertEqual(queue.job_ids, [job.id])
+
     def test_enqueue_at_at_front(self):
         """queue.enqueue_at() accepts at_front argument. When true, job will be put at position 0
         of the queue when the time comes for the job to be scheduled"""
