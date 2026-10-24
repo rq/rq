@@ -15,7 +15,7 @@ from rq.scheduler import RQScheduler
 from rq.serializers import JSONSerializer
 from rq.utils import current_timestamp, utcformat
 from rq.worker import Worker
-from tests import RQTestCase, find_empty_redis_database, ssl_test
+from tests import RQTestCase, find_empty_redis_database, ssl_test, system_timezone
 
 from .fixtures import kill_worker, say_hello
 
@@ -82,54 +82,26 @@ class TestScheduledJobRegistry(RQTestCase):
         job.save()
         registry = ScheduledJobRegistry(queue=queue)
 
-        from datetime import timezone
+        # A naive datetime is local time, at the UTC offset in effect on that date:
+        # New York is UTC-5 in January and UTC-4 in July. Unique scheduling converts it the same way.
+        with system_timezone('America/New_York'):
+            for scheduled_time, timestamp in [
+                (datetime(2019, 1, 1), 1546300800 + 5 * 3600),
+                (datetime(2019, 7, 1), 1561939200 + 4 * 3600),
+            ]:
+                registry.schedule(job, scheduled_time)
+                self.assertEqual(self.connection.zscore(registry.key, job.id), timestamp)
 
-        # If we pass in a datetime with no timezone, `schedule()`
-        # assumes local timezone so depending on your local timezone,
-        # the timestamp maybe different
-        #
-        # we need to account for the difference between a timezone
-        # with DST active and without DST active.  The time.timezone
-        # property isn't accurate when time.daylight is non-zero,
-        # we'll test both.
-        #
-        # first, time.daylight == 0 (not in DST).
-        # mock the sitatuoin for American/New_York not in DST (UTC - 5)
-        # time.timezone = 18000
-        # time.daylight = 0
-        # time.altzone = 14400
+                unique_job = Job.create('myfunc', id=f'unique-{scheduled_time.month}', connection=self.connection)
+                queue.schedule_job(unique_job, scheduled_time, unique=True)
+                self.assertEqual(self.connection.zscore(registry.key, unique_job.id), timestamp)
 
-        mock_day = mock.patch('time.daylight', 0)
-        mock_tz = mock.patch('time.timezone', 18000)
-        mock_atz = mock.patch('time.altzone', 14400)
-        with mock_tz, mock_day, mock_atz:
-            registry.schedule(job, datetime(2019, 1, 1))
-            self.assertEqual(
-                self.connection.zscore(registry.key, job.id), 1546300800 + 18000
-            )  # 2019-01-01 UTC in Unix timestamp
-
-            # second, time.daylight != 0 (in DST)
-            # mock the sitatuoin for American/New_York not in DST (UTC - 4)
-            # time.timezone = 18000
-            # time.daylight = 1
-            # time.altzone = 14400
-            mock_day = mock.patch('time.daylight', 1)
-            mock_tz = mock.patch('time.timezone', 18000)
-            mock_atz = mock.patch('time.altzone', 14400)
-            with mock_tz, mock_day, mock_atz:
-                registry.schedule(job, datetime(2019, 1, 1))
-                self.assertEqual(
-                    self.connection.zscore(registry.key, job.id), 1546300800 + 14400
-                )  # 2019-01-01 UTC in Unix timestamp
-
-            # Score is always stored in UTC even if datetime is in a different tz
-            tz = timezone(timedelta(hours=7))
-            job = Job.create('myfunc', connection=self.connection)
-            job.save()
-            registry.schedule(job, datetime(2019, 1, 1, 7, tzinfo=tz))
-            self.assertEqual(
-                self.connection.zscore(registry.key, job.id), 1546300800
-            )  # 2019-01-01 UTC in Unix timestamp
+        # Score is always stored in UTC even if datetime is in a different tz
+        tz = timezone(timedelta(hours=7))
+        job = Job.create('myfunc', connection=self.connection)
+        job.save()
+        registry.schedule(job, datetime(2019, 1, 1, 7, tzinfo=tz))
+        self.assertEqual(self.connection.zscore(registry.key, job.id), 1546300800)  # 2019-01-01 UTC in Unix timestamp
 
     def test_remove_jobs(self):
         """Removing job ids from ScheduledJobRegistry. Will be deprecated in the future."""
