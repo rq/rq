@@ -173,6 +173,7 @@ class WorkerPool:
                 'logging_level': logging_level,
                 'worker_class': self.worker_class,
                 'job_class': self.job_class,
+                'queue_class': self.queue_class,
                 'serializer': self.serializer,
                 'exception_handlers': self.exception_handlers,
             },

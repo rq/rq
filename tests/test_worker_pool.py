@@ -10,7 +10,15 @@ from rq.serializers import JSONSerializer
 from rq.worker import SimpleWorker
 from rq.worker_pool import WorkerPool, run_worker
 from tests import RQTestCase
-from tests.fixtures import CustomJob, _send_shutdown_command, add_meta, div_by_zero, long_running_job, say_hello
+from tests.fixtures import (
+    CustomJob,
+    PrefixedQueue,
+    _send_shutdown_command,
+    add_meta,
+    div_by_zero,
+    long_running_job,
+    say_hello,
+)
 
 
 def wait_and_send_shutdown_signal(pid, time_to_wait=0.0):
@@ -167,5 +175,18 @@ class TestWorkerPool(RQTestCase):
             self.assertEqual(job.get_status(refresh=True), JobStatus.FAILED)
             job.refresh()
             self.assertEqual(job.meta, {'foo': 1})
+        finally:
+            pool.stop_workers()
+
+    def test_queue_class_propagated_to_workers(self):
+        """Ensure queue_class is passed to workers spawned by the pool"""
+        queue = PrefixedQueue('foo', connection=self.connection)
+        job = queue.enqueue(say_hello)
+
+        pool = WorkerPool([queue], connection=self.connection, num_workers=1, queue_class=PrefixedQueue)
+        try:
+            pool.start(burst=True)
+
+            self.assertEqual(job.get_status(refresh=True), JobStatus.FINISHED)
         finally:
             pool.stop_workers()
