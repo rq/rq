@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import calendar
 import logging
-import time
 import warnings
 from collections.abc import Sequence
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, cast
 
 from redis.exceptions import WatchError
@@ -644,10 +643,9 @@ class ScheduledJobRegistry(BaseRegistry):
         Adds job to registry, scored by its execution time (in UTC).
         If datetime has no tzinfo, it will assume local timezone.
         """
-        # If datetime has no timezone, assume server's local timezone
+        # If datetime has no timezone, assume server's local timezone (with that date's DST offset)
         if not scheduled_datetime.tzinfo:
-            tz = timezone(timedelta(seconds=-(time.timezone if time.daylight == 0 else time.altzone)))
-            scheduled_datetime = scheduled_datetime.replace(tzinfo=tz)
+            scheduled_datetime = scheduled_datetime.astimezone()
 
         timestamp = calendar.timegm(scheduled_datetime.utctimetuple())
         connection = pipeline if pipeline is not None else self.connection
