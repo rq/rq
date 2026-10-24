@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
 from .utils import now
@@ -75,7 +75,7 @@ class Repeat:
         return intervals[count]
 
     @classmethod
-    def schedule(cls, job: Job, queue: Queue, pipeline: Pipeline | None = None):
+    def schedule(cls, job: Job, queue: Queue, pipeline: Pipeline | None = None) -> datetime | None:
         """Schedules a job to repeat based on its repeat configuration.
 
         This decrements the job's repeats_left counter and either enqueues
@@ -88,7 +88,7 @@ class Repeat:
             pipeline (Optional[Pipeline], optional): Redis pipeline to use. Defaults to None.
 
         Returns:
-            scheduled_time (Optional[datetime]): When the job was scheduled to run, or None if not scheduled
+            scheduled_time (Optional[datetime]): When the job was scheduled to run, or None if enqueued immediately
         """
 
         if job.repeats_left is None or job.repeats_left <= 0:
@@ -107,6 +107,7 @@ class Repeat:
         job.repeats_left = job.repeats_left - 1
         job.save(pipeline=pipe)
 
+        scheduled_time = None
         if interval == 0:
             # Enqueue the job immediately
             queue._enqueue_job(job, pipeline=pipe)
@@ -121,3 +122,5 @@ class Repeat:
         # Execute the pipeline if we created it
         if pipeline is None:
             pipe.execute()
+
+        return scheduled_time

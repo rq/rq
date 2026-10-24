@@ -7,7 +7,7 @@ from rq.executions import prepare_execution
 from rq.job import Job, Retry
 from rq.queue import Queue
 from rq.registry import StartedJobRegistry
-from rq.results import Result, get_key
+from rq.results import Result
 from rq.utils import now
 from rq.worker import Worker
 from tests import RQTestCase, min_redis_version
@@ -46,7 +46,7 @@ class TestResult(RQTestCase):
         self.assertEqual(result.execution_ended_at, ended)
 
         # Check that ttl is properly set
-        key = get_key(job.id)
+        key = Result.get_key(job.id)
         ttl = self.connection.pttl(key)
         self.assertTrue(5000 < ttl <= 10000)
 
@@ -87,7 +87,7 @@ class TestResult(RQTestCase):
         self.assertEqual(result.exc_string, 'exception')
 
         # Check that ttl is properly set
-        key = get_key(job.id)
+        key = Result.get_key(job.id)
         ttl = self.connection.pttl(key)
         self.assertTrue(5000 < ttl <= 10000)
 

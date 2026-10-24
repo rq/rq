@@ -21,7 +21,8 @@ from rq.connections import get_connection_kwargs
 from rq.defaults import DEFAULT_JOB_MONITORING_INTERVAL
 from rq.job import Job
 from rq.suspension import resume
-from rq.worker import HerokuWorker, Worker
+from rq.timeouts import UnixSignalDeathPenalty
+from rq.worker import HerokuWorker, SpawnWorker, Worker
 
 
 def say_pid():
@@ -410,6 +411,29 @@ def _send_kill_horse_command(worker_name, connection_kwargs, delay=0.25):
 
 class CustomJob(Job):
     """A custom job class just to test it"""
+
+
+class CustomQueue(Queue):
+    """A custom queue class just to test it"""
+
+
+class CustomDeathPenalty(UnixSignalDeathPenalty):
+    """A custom death penalty class just to test it"""
+
+
+def get_job_id_from_environ():
+    return os.environ['RQ_JOB_ID']
+
+
+class RecordingSpawnWorker(SpawnWorker):
+    """Records, from inside the horse, the classes it runs the job with."""
+
+    def perform_job(self, job, queue, execution):
+        self.connection.set(
+            'spawn-worker-config',
+            f'{type(self).__name__} {type(job).__name__} {type(queue).__name__} {self.death_penalty_class.__name__}',
+        )
+        return super().perform_job(job, queue, execution)
 
 
 async def async_success_callback(job, connection, result):

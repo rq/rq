@@ -15,7 +15,7 @@ from uuid import uuid4
 
 from redis import WatchError
 
-from .defaults import CALLBACK_TIMEOUT, UNSERIALIZABLE_RETURN_VALUE_PAYLOAD
+from .defaults import CALLBACK_TIMEOUT, RQ_KEY_PREFIX, UNSERIALIZABLE_RETURN_VALUE_PAYLOAD
 from .types import FailureCallbackType, SuccessCallbackType
 
 if TYPE_CHECKING:
@@ -174,7 +174,7 @@ class Job:
     """A Job is just a convenient datastructure to pass around job (meta) data."""
 
     _dependency: Job | None
-    redis_job_namespace_prefix = 'rq:job:'
+    redis_job_namespace_prefix = RQ_KEY_PREFIX + ':job:'
 
     def __init__(self, id: str | None = None, connection: Redis | None = None, serializer=None):
         # Manually check for the presence of the connection argument to preserve
@@ -216,6 +216,8 @@ class Job:
         self._status: JobStatus = JobStatus.CREATED
         self._dependency_ids: list[str] = []
         self.meta: dict[str, Any] = {}
+        # Stored meta that could not be deserialized here, kept so a save writes it back unchanged.
+        self._unreadable_meta: bytes | None = None
         self.serializer = resolve_serializer(serializer)
         # Tracks remaining retries for exception-based retry. Set to retry.max when a job
         # is enqueued with retry=Retry(...) via queue.enqueue(). Decremented each time
@@ -424,11 +426,15 @@ class Job:
             status (JobStatus): The Job Status
         """
         if refresh:
-            status = self.connection.hget(self.key, 'status')
-            if not status:
-                raise InvalidJobOperation(f'Failed to retrieve status for job: {self.id}')
-            self._status = JobStatus(as_text(status))
+            self._status = self._fetch_status()
         return self._status
+
+    def _fetch_status(self) -> JobStatus:
+        """Reads the status stored in Redis without updating the cached status."""
+        status = self.connection.hget(self.key, 'status')
+        if not status:
+            raise InvalidJobOperation(f'Failed to retrieve status for job: {self.id}')
+        return JobStatus(as_text(status))
 
     def set_status(self, status: JobStatus, pipeline: Pipeline | None = None) -> None:
         """Set's the Job Status
@@ -1035,10 +1041,12 @@ class Job:
         self.allow_dependency_failures = bool(int(allow_failures)) if allow_failures else None
         self.enqueue_at_front = bool(int(obj['enqueue_at_front'])) if 'enqueue_at_front' in obj else None
         self.ttl = int(obj['ttl']) if obj.get('ttl') else None
+        self._unreadable_meta = None
         try:
             self.meta = self.serializer.loads(obj['meta']) if obj.get('meta') else {}
         except Exception:  # depends on the serializer
             self.meta = {'unserialized': obj.get('meta', {})}
+            self._unreadable_meta = obj['meta']
 
         self.number_of_retries = int(obj['number_of_retries']) if obj.get('number_of_retries') else None
         self.retries_left = int(obj['retries_left']) if obj.get('retries_left') else None
@@ -1154,7 +1162,7 @@ class Job:
             obj['dependency_id'] = self._dependency_ids[0]  # for backwards compatibility
             obj['dependency_ids'] = json.dumps(self._dependency_ids)
         if self.meta and include_meta:
-            obj['meta'] = self.serializer.dumps(self.meta)
+            obj['meta'] = self._serialize_meta()
         if self.ttl:
             obj['ttl'] = self.ttl
 
@@ -1191,8 +1199,16 @@ class Job:
 
     def save_meta(self):
         """Stores job meta from the job instance to the corresponding Redis key."""
-        meta = self.serializer.dumps(self.meta)
+        meta = self._serialize_meta()
         self.connection.hset(self.key, 'meta', meta)
+
+    def _serialize_meta(self) -> bytes:
+        # If this process could not deserialize the stored meta and it is still the
+        # placeholder holding those bytes, write the bytes back instead of the placeholder.
+        is_placeholder = len(self.meta) == 1 and self.meta.get('unserialized') is self._unreadable_meta
+        if is_placeholder and self._unreadable_meta is not None:
+            return self._unreadable_meta
+        return self.serializer.dumps(self.meta)
 
     def cancel(
         self,
@@ -1305,7 +1321,9 @@ class Job:
             q.enqueue_ready_jobs_by_queue(dependent_job_ids_by_queue)
 
         if self.has_rate_limit:
-            self.rate_limit_registry.cancel(self.id)
+            from .rate_limit import RateLimitRegistry
+
+            RateLimitRegistry.from_job(self).cancel(self.id)
 
         return dependent_job_ids_by_queue
 
@@ -1338,7 +1356,10 @@ class Job:
             q = Queue(name=self.origin, connection=self.connection, serializer=self.serializer)
             q.remove(self, pipeline=pipeline)
         registry: BaseRegistry
-        if self.is_finished:
+        # Read the stored status without overwriting the cached one, which the caller may have
+        # already changed in `pipeline` (e.g. FINISHED or FAILED before deleting the job).
+        status = self._fetch_status()
+        if status == JobStatus.FINISHED:
             from .registry import FinishedJobRegistry
 
             registry = FinishedJobRegistry(
@@ -1346,7 +1367,7 @@ class Job:
             )
             registry.remove(self, pipeline=pipeline)
 
-        elif self.is_deferred:
+        elif status == JobStatus.DEFERRED:
             from .registry import DeferredJobRegistry
 
             registry = DeferredJobRegistry(
@@ -1354,7 +1375,7 @@ class Job:
             )
             registry.remove(self, pipeline=pipeline)
 
-        elif self.is_ready_to_enqueue:
+        elif status == JobStatus.READY_TO_ENQUEUE:
             from .registry import ReadyJobRegistry
 
             registry = ReadyJobRegistry(
@@ -1362,7 +1383,7 @@ class Job:
             )
             registry.remove(self, pipeline=pipeline)
 
-        elif self.is_started:
+        elif status == JobStatus.STARTED:
             from .registry import StartedJobRegistry
 
             # TODO: need to cleanup job executions too
@@ -1371,7 +1392,7 @@ class Job:
             )
             registry.remove_executions(self, pipeline=pipeline)
 
-        elif self.is_scheduled:
+        elif status == JobStatus.SCHEDULED:
             from .registry import ScheduledJobRegistry
 
             registry = ScheduledJobRegistry(
@@ -1379,11 +1400,11 @@ class Job:
             )
             registry.remove(self, pipeline=pipeline)
 
-        elif self.is_failed or self.is_stopped:
+        elif status in (JobStatus.FAILED, JobStatus.STOPPED):
             # TODO: need to cleanup job executions too
             self.failed_job_registry.remove(self, pipeline=pipeline)
 
-        elif self.is_canceled:
+        elif status == JobStatus.CANCELED:
             from .registry import CanceledJobRegistry
 
             registry = CanceledJobRegistry(
@@ -1392,7 +1413,7 @@ class Job:
             registry.remove(self, pipeline=pipeline)
 
     def delete(self, pipeline: Pipeline | None = None, remove_from_queue: bool = True, delete_dependents: bool = False):
-        """Cancels the job and deletes the job hash from Redis. Jobs depending
+        """Cancels the job and deletes its hash and execution results from Redis. Jobs depending
         on this job can optionally be deleted as well.
 
         Args:
@@ -1400,26 +1421,33 @@ class Job:
             remove_from_queue (bool, optional): Whether the job should be removed from the queue. Defaults to True.
             delete_dependents (bool, optional): Whether job dependents should also be deleted. Defaults to False.
         """
+        from .results import Result
+
         connection = pipeline if pipeline is not None else self.connection
 
         self._remove_from_registries(pipeline=pipeline, remove_from_queue=remove_from_queue)
 
         if delete_dependents:
             self.delete_dependents(pipeline=pipeline)
-        self.execution_registry.delete(job=self, pipeline=connection)  # type: ignore
+        if not self.has_rate_limit:
+            # If a rate-limited job is still running (has a live execution), we don't delete the execution.
+            # Deleting it could free the job's slot and enqueue another job, going over the allowed concurrency.
+            self.execution_registry.delete(job=self, pipeline=connection)  # type: ignore
         if self.group_id:
             from .group import Group
 
             group = Group.fetch(self.group_id, self.connection)
             group.delete_job(self.id, pipeline=pipeline)
 
-        connection.delete(self.key, self.dependents_key, self.dependencies_key)
+        connection.delete(self.key, self.dependents_key, self.dependencies_key, Result.get_key(self.id))
 
         if self.has_rate_limit:
-            # No-pipeline: remove + promote immediately (after the hash delete above).
-            # Caller-owned pipeline: buffer the ZREMs into the caller's transaction without
-            # promoting — the next release/acquire or maintenance cleanup promotes.
-            self.rate_limit_registry.cancel(self.id, pipeline=pipeline)
+            from .rate_limit import RateLimitRegistry
+
+            # No-pipeline: if the job has no live execution, release its slot and promote immediately.
+            # Caller-owned pipeline: only drop it from rate_limited; its slot is released and
+            # waiting jobs promoted by the horse's release or maintenance cleanup.
+            RateLimitRegistry.from_job(self).cancel(self.id, pipeline=pipeline)
 
     def delete_dependents(self, pipeline: Pipeline | None = None):
         """Delete jobs depending on this job.
@@ -1597,13 +1625,6 @@ class Job:
             self.origin, connection=self.connection, job_class=self.__class__, serializer=self.serializer
         )
 
-    @property
-    def rate_limit_registry(self):
-        from .rate_limit import RateLimitRegistry
-
-        assert self.rate_limit_key
-        return RateLimitRegistry(key=self.rate_limit_key, connection=self.connection)
-
     def send_webhooks(self, status: str | JobStatus, *, exc_string: str | None = None) -> None:
         """Sends every webhook registered for the given terminal job status.
         `exc_string` is included in the payload of `failed` webhooks.
@@ -1688,12 +1709,11 @@ class Job:
         execution_started_at: datetime,
         execution_ended_at: datetime,
         worker_name: str = '',
-    ) -> int:
+    ) -> None:
         """Handles jobs that return a Retry object as its result.
 
         Creates a RETRIED result record, increments number_of_retries,
-        and requeues or schedules the job for retry. Returns the retry
-        interval in seconds (0 for an immediate retry).
+        and requeues or schedules the job for retry.
 
         Args:
             queue (Queue): The queue to retry the job on
@@ -1735,7 +1755,6 @@ class Job:
                 self.id,
                 retry.max - (self.number_of_retries or 0),
             )
-        return retry_interval
 
     def get_retry_interval(self) -> int:
         """Returns the desired retry interval.

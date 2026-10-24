@@ -7,17 +7,19 @@ from redis import Redis
 from redis.client import Pipeline
 
 from . import Queue
+from .defaults import RQ_KEY_PREFIX
 from .exceptions import NoSuchGroupError
 from .job import Job
 from .queue import EnqueueData
-from .utils import as_text
+from .utils import as_text, missing_keys
 
 
 class Group:
     """A Group is a container for tracking multiple jobs with a single identifier."""
 
-    REDIS_GROUP_NAME_PREFIX = 'rq:group:'
-    REDIS_GROUP_KEY = 'rq:groups'
+    REDIS_GROUP_NAME_PREFIX = RQ_KEY_PREFIX + ':group:'
+    REDIS_GROUP_KEY = RQ_KEY_PREFIX + ':groups'
+    REDIS_GROUP_CLEANING_KEY = RQ_KEY_PREFIX + ':clean_groups'
 
     def __init__(self, connection: Redis, name: str | None = None):
         self.name = name if name else str(uuid4().hex)
@@ -36,21 +38,10 @@ class Group:
     def cleanup(self):
         """Delete jobs from the group's job registry that have been deleted or expired from Redis.
         We assume while running this that alive jobs have all been fetched from Redis in fetch_jobs method"""
-        with self.connection.pipeline() as pipe:  # Use a new pipeline
-            job_ids = [as_text(job) for job in list(self.connection.smembers(self.key))]
-            if not job_ids:
-                return
-            expired_job_ids = []
-            for job in job_ids:
-                pipe.exists(Job.key_for(job))
-            results = pipe.execute()
-
-            for i, key_exists in enumerate(results):
-                if not key_exists:
-                    expired_job_ids.append(job_ids[i])
-            if expired_job_ids:
-                pipe.srem(self.key, *expired_job_ids)
-                pipe.execute()
+        job_ids_by_key = {Job.key_for(as_text(job)): as_text(job) for job in self.connection.smembers(self.key)}
+        expired_job_ids = [job_ids_by_key[key] for key in missing_keys(self.connection, list(job_ids_by_key))]
+        if expired_job_ids:
+            self.connection.srem(self.key, *expired_job_ids)
 
     def enqueue_many(self, queue: Queue, job_datas: Iterable[EnqueueData], pipeline: Pipeline | None = None):
         pipe = pipeline if pipeline else self.connection.pipeline()
@@ -104,6 +95,18 @@ class Group:
     def get_key(cls, name: str) -> str:
         """Return the Redis key of the set containing a group's jobs"""
         return cls.REDIS_GROUP_NAME_PREFIX + name
+
+    @classmethod
+    def acquire_maintenance_lock(cls, connection: Redis, timeout: int) -> bool:
+        """Returns a boolean indicating whether a lock to clean all groups
+        is acquired. The lock is never released explicitly. It expires after
+        `timeout` seconds so groups are cleaned at most once per window
+        across all workers.
+
+        Returns:
+            lock_acquired (bool)
+        """
+        return bool(connection.set(cls.REDIS_GROUP_CLEANING_KEY, 1, nx=True, ex=timeout))
 
     @classmethod
     def clean_registries(cls, connection: Redis):

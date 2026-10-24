@@ -1,8 +1,10 @@
+import threading
 from time import sleep
+from unittest import mock
 
 import pytest
 
-from rq import Queue, SimpleWorker
+from rq import Queue, SimpleWorker, Worker
 from rq.exceptions import NoSuchGroupError
 from rq.group import Group
 from rq.job import Job
@@ -88,6 +90,16 @@ class TestGroup(RQTestCase):
         assert job.id not in redis_jobs
         assert job not in group.get_jobs()
 
+    def test_cleanup_checks_alive_jobs_with_one_exists_call(self):
+        q = Queue(connection=self.connection)
+        group = Group.create(connection=self.connection)
+        group.enqueue_many(q, [self.job_1_data, self.job_2_data])
+        with mock.patch.object(self.connection, 'exists', wraps=self.connection.exists) as exists:
+            group.cleanup()
+        exists.assert_called_once()
+        self.assertEqual(len(exists.call_args.args), 2)
+        self.assertEqual(len(group.get_jobs()), 2)
+
     def test_group_added_to_registry(self):
         q = Queue(connection=self.connection)
         group = Group.create(connection=self.connection)
@@ -105,6 +117,7 @@ class TestGroup(RQTestCase):
         group.enqueue_many(q, [short_lived_job, self.job_1_data])
         w.work(burst=True, max_jobs=1)
         sleep(2)
+        self.connection.delete(Group.REDIS_GROUP_CLEANING_KEY)
         w.run_maintenance_tasks()
         group.cleanup()
         assert len(group.get_jobs()) == 1
@@ -120,6 +133,7 @@ class TestGroup(RQTestCase):
         group.enqueue_many(q, [short_lived_job])
         w.work(burst=True, max_jobs=1)
         sleep(2)
+        self.connection.delete(Group.REDIS_GROUP_CLEANING_KEY)
         w.run_maintenance_tasks()
         redis_groups = {as_text(group) for group in self.connection.smembers('rq:groups')}
         assert group.name not in redis_groups
@@ -133,6 +147,7 @@ class TestGroup(RQTestCase):
         group.enqueue_many(q, [short_lived_job])
         w.work(burst=True, max_jobs=1)
         sleep(2)
+        self.connection.delete(Group.REDIS_GROUP_CLEANING_KEY)
         w.run_maintenance_tasks()
         self.assertRaises(NoSuchGroupError, Group.fetch, group.name, group.connection)
         q.empty()
@@ -158,3 +173,68 @@ class TestGroup(RQTestCase):
         jobs[0].delete()
         assert not self.connection.exists(Group.get_key(group.name))
         assert Group.all(connection=self.connection) == []
+
+    def test_group_lock_expires_before_next_maintenance(self):
+        q = Queue(connection=self.connection)
+        worker = Worker([q], connection=self.connection, maintenance_interval=30)
+        worker.clean_group_registries()
+        ttl = self.connection.ttl(Group.REDIS_GROUP_CLEANING_KEY)
+        self.assertTrue(0 < ttl < worker.maintenance_interval)
+
+    def test_group_lock_with_float_maintenance_interval(self):
+        q = Queue(connection=self.connection)
+        worker = Worker([q], connection=self.connection, maintenance_interval=30.0)
+        worker.clean_group_registries()
+        self.assertEqual(self.connection.ttl(Group.REDIS_GROUP_CLEANING_KEY), 29)
+
+    def test_group_lock_with_zero_maintenance_interval(self):
+        q = Queue(connection=self.connection)
+        worker = Worker([q], connection=self.connection, maintenance_interval=0)
+        worker.clean_group_registries()
+        self.assertTrue(0 < self.connection.pttl(Group.REDIS_GROUP_CLEANING_KEY) <= 1000)
+
+    def test_clean_group_registries_locks_across_workers(self):
+        q = Queue(connection=self.connection)
+        worker = Worker([q], connection=self.connection)
+
+        def expired_group():
+            group = Group.create(connection=self.connection)
+            jobs = group.enqueue_many(q, [Queue.prepare_data(say_hello)])
+            self.connection.delete(jobs[0].key)
+            return group
+
+        first = expired_group()
+        worker.clean_group_registries()
+        self.assertFalse(self.connection.sismember(Group.REDIS_GROUP_KEY, first.name))
+        self.assertTrue(self.connection.exists(Group.REDIS_GROUP_CLEANING_KEY))
+
+        second = expired_group()
+        worker.clean_group_registries()
+        self.assertTrue(self.connection.sismember(Group.REDIS_GROUP_KEY, second.name))
+
+        self.connection.delete(Group.REDIS_GROUP_CLEANING_KEY)
+        worker.clean_group_registries()
+        self.assertFalse(self.connection.sismember(Group.REDIS_GROUP_KEY, second.name))
+        q.empty()
+
+    def test_only_one_worker_cleans_groups_per_window(self):
+        q = Queue(connection=self.connection)
+        workers = [Worker([q], connection=self.connection) for _ in range(20)]
+
+        with mock.patch.object(Group, 'clean_registries') as clean:
+            threads = [threading.Thread(target=w.clean_group_registries) for w in workers]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+            self.assertEqual(clean.call_count, 1)
+
+            self.connection.delete(Group.REDIS_GROUP_CLEANING_KEY)
+            workers[0].clean_group_registries()
+            self.assertEqual(clean.call_count, 2)
+
+    def test_group_cleaning_key_expires(self):
+        q = Queue(connection=self.connection)
+        Worker([q], connection=self.connection).clean_group_registries()
+        ttl = self.connection.ttl(Group.REDIS_GROUP_CLEANING_KEY)
+        self.assertTrue(0 < ttl <= 899)

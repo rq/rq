@@ -178,16 +178,57 @@ class TestWorker(RQTestCase):
         """Worker creation falls back to unknown IP when CLIENT LIST is unsupported."""
         q = Queue('foo', connection=self.connection)
 
+        unsupported = redis.exceptions.ResponseError('unknown command')
         with mock.patch.object(self.connection, 'client_setname') as mock_client_setname:
+            with mock.patch.object(self.connection, 'client_info', side_effect=unsupported):
+                with mock.patch.object(self.connection, 'client_list', side_effect=unsupported):
+                    with pytest.warns(Warning, match='CLIENT LIST command not supported'):
+                        w = Worker([q], connection=self.connection)
+
+        mock_client_setname.assert_called_once_with(w.name)
+        self.assertEqual(w.ip_address, 'unknown')
+
+    @min_redis_version((6, 2, 0))
+    def test_create_worker_reads_own_address_with_client_info(self):
+        """Worker creation asks for its own connection instead of listing every client."""
+        q = Queue('foo', connection=self.connection)
+
+        with mock.patch.object(self.connection, 'client_list') as mock_client_list:
+            w = Worker([q], connection=self.connection)
+
+        mock_client_list.assert_not_called()
+        self.assertNotEqual(w.ip_address, 'unknown')
+
+    def test_create_worker_falls_back_to_client_list(self):
+        """Worker creation lists clients when the server predates CLIENT INFO."""
+        q = Queue('foo', connection=self.connection)
+
+        with mock.patch.object(
+            self.connection,
+            'client_info',
+            side_effect=redis.exceptions.ResponseError('unknown subcommand'),
+        ):
             with mock.patch.object(
-                self.connection,
-                'client_list',
-                side_effect=redis.exceptions.ResponseError('unknown command'),
-            ):
+                self.connection, 'client_list', wraps=self.connection.client_list
+            ) as mock_client_list:
+                w = Worker([q], connection=self.connection)
+
+        mock_client_list.assert_called_once()
+        self.assertNotEqual(w.ip_address, 'unknown')
+
+    def test_create_worker_with_client_list_missing_own_connection(self):
+        """Worker creation falls back to unknown IP when CLIENT LIST does not include its own name."""
+        q = Queue('foo', connection=self.connection)
+
+        with mock.patch.object(
+            self.connection,
+            'client_info',
+            side_effect=redis.exceptions.ResponseError('unknown subcommand'),
+        ):
+            with mock.patch.object(self.connection, 'client_list', return_value=[]):
                 with pytest.warns(Warning, match='CLIENT LIST command not supported'):
                     w = Worker([q], connection=self.connection)
 
-        mock_client_setname.assert_called_once_with(w.name)
         self.assertEqual(w.ip_address, 'unknown')
 
     def test_create_worker_with_unsupported_client_setname(self):
@@ -291,6 +332,22 @@ class TestWorker(RQTestCase):
         self.assertIsInstance(job.meta, dict)
         self.assertIn('unserialized', job.meta.keys())
 
+    def test_retry_keeps_unreadable_meta(self):
+        """A worker that cannot deserialize meta leaves it unchanged when it retries the job."""
+        q = Queue(connection=self.connection)
+        job = q.enqueue(div_by_zero, 1, retry=Retry(max=1), meta={'key': 'value'})
+        # Pickled meta naming a module the worker cannot import
+        unreadable_meta = b'cnot_an_importable_module\nOwner\n.'
+        self.connection.hset(job.key, 'meta', unreadable_meta)
+
+        w = Worker([q], connection=self.connection)
+        w.work(burst=True)
+
+        job.refresh()
+        self.assertEqual(job.retries_left, 0)
+        self.assertIn(job, FailedJobRegistry(queue=q))
+        self.assertEqual(self.connection.hget(job.key, 'meta'), unreadable_meta)
+
     @mock.patch('rq.worker.logger.error')
     def test_deserializing_failure_is_handled(self, mock_logger_error):
         """
@@ -379,6 +436,28 @@ class TestWorker(RQTestCase):
         worker.maintain_heartbeats(job, execution)
         self.assertFalse(self.connection.exists(job.key))
 
+    def test_maintain_heartbeats_expires_recreated_worker_key(self):
+        """worker.maintain_heartbeats() sets a TTL on the worker key it recreates"""
+        queue = Queue(connection=self.connection)
+        worker = Worker([queue], connection=self.connection)
+        worker.register_birth()
+        job = queue.enqueue(say_hello)
+        execution = worker.prepare_execution(job)
+        worker.prepare_job_execution(job)
+        self.connection.delete(worker.key)
+
+        serialize = worker.serialize
+
+        def expire_key_then_serialize():
+            # The worker stalls past the key's TTL again before recreating it
+            self.connection.delete(worker.key)
+            return serialize()
+
+        with mock.patch.object(worker, 'serialize', side_effect=expire_key_then_serialize):
+            worker.maintain_heartbeats(job, execution)
+
+        self.assertGreater(self.connection.ttl(worker.key), 0)
+
     def test_maintain_heartbeats_working_time_from_started_at(self):
         """maintain_heartbeats() measures working time from job.started_at, not execution.created_at"""
         queue = Queue(connection=self.connection)
@@ -405,6 +484,15 @@ class TestWorker(RQTestCase):
             w.work(burst=True)
             # First call is prior to job loop, second raises the error,
             # third is successful, after "recovery"
+            assert mocked.call_count == 3
+
+    @slow
+    def test_heartbeat_survives_redis_timeout(self):
+        with mock.patch.object(Worker, 'heartbeat') as mocked:
+            mocked.side_effect = [None, redis.exceptions.TimeoutError()]
+            q = Queue(connection=self.connection)
+            w = Worker([q])
+            w.work(burst=True)
             assert mocked.call_count == 3
 
     def test_job_timeout_moved_to_failed_job_registry(self):

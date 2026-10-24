@@ -1,10 +1,40 @@
 ### RQ 3.0 (unreleased)
-* `UnixSignalDeathPenalty` restores the previous `SIGALRM` handler when the timeout block ends, instead of installing `SIG_DFL`.
-* `Job.perform()` no longer removes the job key's TTL. Job key TTL changes are now handled by workers. Thanks @selwin!
-* Refactored how job dependencies are handled. Introduced `READY_TO_ENQUEUE` job status and ReadyJobRegistry. Thanks @selwin!
-* `get_current_job()` now uses `contextvars` instead of thread-locals; gevent-based custom workers need `greenlet` >= 0.4.17. Thanks @selwin!
-* `Worker.handle_job_success()` now requires an `execution` argument, a breaking change for subclasses that override or call this method. Thanks @selwin!
+
+New Features:
+* Added [concurrency rate limits](https://python-rq.org/docs/#concurrency-rate-limits) via `queue.enqueue(func, rate_limit=RateLimit(...))`. Thanks @selwin!
+* You can now configure `RQ_KEY_PREFIX` via environment variable, making it possible to run RQ on Redis Cluster. Thanks @dmonroy and @paltman!
+* Workers can now track multiple executions, exposed via `worker.get_current_executions()` and `worker.current_execution_count`. Thanks @selwin!
+* Added `send_stop_execution_command()` to stop a single execution of a job. Thanks @selwin!
+* `Execution` now stores its job ID. Thanks @selwin!
+
+Breaking Changes:
+* `SpawnWorker` now uses `os.posix_spawn()` and requires POSIX. Thanks @selwin!
+* RQ now requires `redis-py` >= 5.0.1. Thanks @selwin!
+* `CronScheduler` now evaluates cron strings in local timezone instead of UTC (like system cron). Thanks @selwin!
+* Dependent jobs now pass through a new `READY_TO_ENQUEUE` status and `ReadyJobRegistry` before being enqueued. Thanks @selwin!
 * RQ now disables propagation on loggers it configures itself to prevent double logging when applications configure logging afterwards. Thanks @selwin!
+* `Queue.enqueue_dependents()` no longer accepts `pipeline`. Thanks @selwin!
+* `job.cancel(enqueue_dependents=True, pipeline=pipeline)` requires a watched pipeline and no longer enqueues dependents. Thanks @selwin!
+* `rate_limit` is now a reserved keyword argument of `queue.enqueue()`. Thanks @selwin!
+* `Worker.perform_job()`, `handle_job_success()`, `monitor_work_horse()` and `maintain_heartbeats()` now require an `execution` argument. Thanks @selwin!
+* Removed `worker.set_current_job_id()`, `worker.current_job_working_time` and `worker.set_current_job_working_time()`. Thanks @selwin!
+* Workers no longer store `current_job` in their Redis hash. Thanks @selwin!
+* `worker.get_current_job_id()` no longer accepts a `pipeline` argument. Thanks @selwin!
+* `Job.execute_success_callback()`, `execute_failure_callback()` and `execute_stopped_callback()` are replaced by functions of the same name in `rq.callbacks`. Thanks @selwin!
+* Failure callbacks and exception handlers invoked for abandoned jobs now receive `None` as the traceback. Thanks @selwin!
+* `Job.perform()` no longer removes the job key's TTL. Job key TTL changes are now handled by workers. Thanks @selwin!
+* `get_current_job()` now uses `contextvars` instead of thread-locals; gevent-based custom workers need `greenlet` >= 0.4.17. Thanks @selwin!
+
+Bug Fixes:
+* `UnixSignalDeathPenalty` restores the previous `SIGALRM` handler when the timeout block ends, instead of installing `SIG_DFL`.
+* `Queue.get_job_ids()` and `Queue.get_jobs()` now return an empty slice when `length=0`. Thanks @JackyHsu-X!
+* `Job.delete()` and `Queue.empty()` now also remove the deleted jobs' stored execution results. Thanks @MokiMeow!
+* `enqueue_at()` and `enqueue_in()` now honor `unique=True`. Thanks @jamalkamaladdin!
+* Job repeats are now scheduled against UTC instead of the local wall clock. Thanks @dylanpulver!
+* `StartedJobRegistry.cleanup()` no longer marks finished jobs as abandoned. Thanks @gyanu2507!
+* `StartedJobRegistry.cleanup()` now sends `failed` webhooks for abandoned jobs and no longer aborts when a failure callback raises. Thanks @selwin!
+* Event loops are now closed after coroutine jobs finish. Thanks @Kuang-xianxin!
+* You can now pass in `Iterable` to `queue.enqueue_many()`. Thanks @liuyinchu!
 
 ### RQ 2.12.0 (2026-08-30)
 * Added `CronJobRegistry` so cron job histories can be monitored without an active `CronScheduler`. Thanks @selwin!
