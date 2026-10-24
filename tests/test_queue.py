@@ -56,6 +56,43 @@ class TestQueue(RQTestCase):
         q = Queue(connection=self.connection)
         self.assertEqual(q.name, 'default')
 
+    def test_maintenance_lock_can_be_released_by_its_owner(self):
+        owner = Queue('maintenance', connection=self.connection)
+        contender = Queue('maintenance', connection=self.connection)
+
+        self.assertTrue(owner.acquire_maintenance_lock())
+        self.assertFalse(contender.acquire_maintenance_lock())
+        owner.release_maintenance_lock()
+        self.assertTrue(contender.acquire_maintenance_lock())
+        contender.release_maintenance_lock()
+
+    def test_expired_maintenance_lock_cannot_release_new_owner(self):
+        expired_owner = Queue('maintenance', connection=self.connection)
+        new_owner = Queue('maintenance', connection=self.connection)
+        contender = Queue('maintenance', connection=self.connection)
+
+        self.assertTrue(expired_owner.acquire_maintenance_lock())
+        self.connection.pexpire(expired_owner.registry_cleaning_key, 0)
+        self.assertTrue(new_owner.acquire_maintenance_lock())
+
+        expired_owner.release_maintenance_lock()
+        self.assertFalse(contender.acquire_maintenance_lock())
+        new_owner.release_maintenance_lock()
+        self.assertTrue(contender.acquire_maintenance_lock())
+        contender.release_maintenance_lock()
+
+    def test_maintenance_lock_release_without_acquisition_preserves_owner(self):
+        owner = Queue('maintenance', connection=self.connection)
+        unacquired = Queue('maintenance', connection=self.connection)
+        contender = Queue('maintenance', connection=self.connection)
+
+        self.assertTrue(owner.acquire_maintenance_lock())
+        unacquired.release_maintenance_lock()
+        self.assertFalse(contender.acquire_maintenance_lock())
+        owner.release_maintenance_lock()
+        self.assertTrue(contender.acquire_maintenance_lock())
+        contender.release_maintenance_lock()
+
     def test_equality(self):
         """Mathematical equality of queues."""
         q1 = Queue('foo', connection=self.connection)

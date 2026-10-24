@@ -26,6 +26,7 @@ Breaking Changes:
 * `get_current_job()` now uses `contextvars` instead of thread-locals; gevent-based custom workers need `greenlet` >= 0.4.17. Thanks @selwin!
 
 Bug Fixes:
+* Queue maintenance locks can now only be released by their current owner, so an expired worker cannot delete a replacement lock. Thanks @Gout999!
 * `Queue.get_job_ids()` and `Queue.get_jobs()` now return an empty slice when `length=0`. Thanks @JackyHsu-X!
 * `Job.delete()` and `Queue.empty()` now also remove the deleted jobs' stored execution results. Thanks @MokiMeow!
 * `enqueue_at()` and `enqueue_in()` now honor `unique=True`. Thanks @jamalkamaladdin!
