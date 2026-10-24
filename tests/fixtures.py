@@ -417,6 +417,12 @@ class CustomQueue(Queue):
     """A custom queue class just to test it"""
 
 
+class PrefixedQueue(Queue):
+    """A custom queue class with its own key prefix"""
+
+    redis_queue_namespace_prefix = 'custom:queue:'
+
+
 class CustomDeathPenalty(UnixSignalDeathPenalty):
     """A custom death penalty class just to test it"""
 
