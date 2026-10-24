@@ -593,6 +593,9 @@ time.sleep(1)
 print(job.return_value())
 ```
 
+The decorator's `at_front` setting is a default. Pass `at_front=True` or
+`at_front=False` to `delay()` or `enqueue()` to override it for a single job.
+
 
 ## Bypassing workers
 

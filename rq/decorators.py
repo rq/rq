@@ -100,12 +100,12 @@ class job:  # noqa
 
             depends_on = kwargs.pop('depends_on', None)
             job_id = kwargs.pop('job_id', None)
-            at_front = kwargs.pop('at_front', False)
+            at_front = kwargs.pop('at_front', None)
 
             if not depends_on:
                 depends_on = self.depends_on
 
-            if not at_front:
+            if at_front is None:
                 at_front = self.at_front
 
             return queue.enqueue_call(
