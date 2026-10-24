@@ -471,6 +471,31 @@ class TestJob(RQTestCase):
         serialized2.pop('meta')
         self.assertDictEqual(serialized, serialized2)
 
+    def test_unreadable_meta(self):
+        """Meta this process could not deserialize is written back by save() and save_meta() until it is changed."""
+        job = Job.create(func=fixtures.say_hello, args=('Lionel',), connection=self.connection)
+        job.save()
+        # Pickled meta naming a module this process cannot import (e.g. a type only the enqueuing app has)
+        unreadable_meta = b'cnot_an_importable_module\nOwner\n.'
+        self.connection.hset(job.key, 'meta', unreadable_meta)
+        job.refresh()
+        self.assertEqual(job.meta, {'unserialized': unreadable_meta})
+
+        job.save()
+        self.assertEqual(self.connection.hget(job.key, 'meta'), unreadable_meta)
+
+        job.save_meta()
+        self.assertEqual(self.connection.hget(job.key, 'meta'), unreadable_meta)
+
+        # Changed meta is saved as usual
+        job.meta['foo'] = 'bar'
+        job.save_meta()
+        self.assertEqual(loads(self.connection.hget(job.key, 'meta')), {'unserialized': unreadable_meta, 'foo': 'bar'})
+
+        job.meta = {'foo': 'baz'}
+        job.save()
+        self.assertEqual(loads(self.connection.hget(job.key, 'meta')), {'foo': 'baz'})
+
     def test_unpickleable_result(self):
         """Unpickleable job result doesn't crash job.save() and job.refresh()"""
         job = Job.create(func=fixtures.say_hello, args=('Lionel',), connection=self.connection)

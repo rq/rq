@@ -332,6 +332,22 @@ class TestWorker(RQTestCase):
         self.assertIsInstance(job.meta, dict)
         self.assertIn('unserialized', job.meta.keys())
 
+    def test_retry_keeps_unreadable_meta(self):
+        """A worker that cannot deserialize meta leaves it unchanged when it retries the job."""
+        q = Queue(connection=self.connection)
+        job = q.enqueue(div_by_zero, 1, retry=Retry(max=1), meta={'key': 'value'})
+        # Pickled meta naming a module the worker cannot import
+        unreadable_meta = b'cnot_an_importable_module\nOwner\n.'
+        self.connection.hset(job.key, 'meta', unreadable_meta)
+
+        w = Worker([q], connection=self.connection)
+        w.work(burst=True)
+
+        job.refresh()
+        self.assertEqual(job.retries_left, 0)
+        self.assertIn(job, FailedJobRegistry(queue=q))
+        self.assertEqual(self.connection.hget(job.key, 'meta'), unreadable_meta)
+
     @mock.patch('rq.worker.logger.error')
     def test_deserializing_failure_is_handled(self, mock_logger_error):
         """

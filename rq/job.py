@@ -216,6 +216,8 @@ class Job:
         self._status: JobStatus = JobStatus.CREATED
         self._dependency_ids: list[str] = []
         self.meta: dict[str, Any] = {}
+        # Stored meta that could not be deserialized here, kept so a save writes it back unchanged.
+        self._unreadable_meta: bytes | None = None
         self.serializer = resolve_serializer(serializer)
         # Tracks remaining retries for exception-based retry. Set to retry.max when a job
         # is enqueued with retry=Retry(...) via queue.enqueue(). Decremented each time
@@ -1039,10 +1041,12 @@ class Job:
         self.allow_dependency_failures = bool(int(allow_failures)) if allow_failures else None
         self.enqueue_at_front = bool(int(obj['enqueue_at_front'])) if 'enqueue_at_front' in obj else None
         self.ttl = int(obj['ttl']) if obj.get('ttl') else None
+        self._unreadable_meta = None
         try:
             self.meta = self.serializer.loads(obj['meta']) if obj.get('meta') else {}
         except Exception:  # depends on the serializer
             self.meta = {'unserialized': obj.get('meta', {})}
+            self._unreadable_meta = obj['meta']
 
         self.number_of_retries = int(obj['number_of_retries']) if obj.get('number_of_retries') else None
         self.retries_left = int(obj['retries_left']) if obj.get('retries_left') else None
@@ -1158,7 +1162,7 @@ class Job:
             obj['dependency_id'] = self._dependency_ids[0]  # for backwards compatibility
             obj['dependency_ids'] = json.dumps(self._dependency_ids)
         if self.meta and include_meta:
-            obj['meta'] = self.serializer.dumps(self.meta)
+            obj['meta'] = self._serialize_meta()
         if self.ttl:
             obj['ttl'] = self.ttl
 
@@ -1195,8 +1199,16 @@ class Job:
 
     def save_meta(self):
         """Stores job meta from the job instance to the corresponding Redis key."""
-        meta = self.serializer.dumps(self.meta)
+        meta = self._serialize_meta()
         self.connection.hset(self.key, 'meta', meta)
+
+    def _serialize_meta(self) -> bytes:
+        # If this process could not deserialize the stored meta and it is still the
+        # placeholder holding those bytes, write the bytes back instead of the placeholder.
+        is_placeholder = len(self.meta) == 1 and self.meta.get('unserialized') is self._unreadable_meta
+        if is_placeholder and self._unreadable_meta is not None:
+            return self._unreadable_meta
+        return self.serializer.dumps(self.meta)
 
     def cancel(
         self,
