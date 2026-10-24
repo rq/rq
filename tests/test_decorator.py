@@ -44,10 +44,7 @@ class TestDecorator(RQTestCase):
         self.assertEqual(result.origin, 'queue_name')
 
     def test_decorator_accepts_result_ttl_as_argument(self):
-        """Ensure that passing in result_ttl to the decorator sets the
-        result_ttl on the job
-        """
-        # Ensure default
+        """Check the worker default and explicit result TTL overrides."""
         result = self.decorated_job.enqueue(1, 2)
         self.assertIsNone(result.result_ttl)
 
@@ -58,9 +55,9 @@ class TestDecorator(RQTestCase):
         result = hello.enqueue()
         self.assertEqual(result.result_ttl, 10)
 
-    def test_decorator_uses_worker_result_ttl(self):
-        queue = Queue(connection=self.connection)
+        queue = Queue('decorator-result-ttl', connection=self.connection)
         decorated = job(queue, connection=self.connection)(say_hello)
+
         for ttl in (DEFAULT_RESULT_TTL, 1234):
             with self.subTest(ttl=ttl):
                 result = decorated.enqueue()
@@ -68,17 +65,17 @@ class TestDecorator(RQTestCase):
                 worker.work(burst=True)
 
                 self.assertTrue(result.is_finished)
-                self.assertTrue(ttl - 5 <= self.connection.ttl(result.key) <= ttl)
+                remaining_ttl = self.connection.ttl(result.key)
+                self.assertTrue(ttl - 5 <= remaining_ttl <= ttl)
 
-    def test_decorator_result_ttl_overrides_worker(self):
-        queue = Queue(connection=self.connection)
         decorated = job(queue, connection=self.connection, result_ttl=10)(say_hello)
         result = decorated.enqueue()
         worker = SimpleWorker([queue], default_result_ttl=1234)
         worker.work(burst=True)
 
         self.assertTrue(result.is_finished)
-        self.assertTrue(5 <= self.connection.ttl(result.key) <= 10)
+        remaining_ttl = self.connection.ttl(result.key)
+        self.assertTrue(5 <= remaining_ttl <= 10)
 
     def test_decorator_accepts_ttl_as_argument(self):
         """Ensure that passing in ttl to the decorator sets the ttl on the job"""
