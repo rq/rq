@@ -70,22 +70,33 @@ Jobs persist `rate_limit_key` and `rate_limit_concurrency` on their hash;
 
 ## The Two Operations and Why They're Lua
 
-- `acquire_and_enqueue` — if `ZCARD(allowed) < concurrency`, pop the oldest waiting
-  job, add it to `allowed`, push it onto its origin queue and mark it `queued`.
+- `acquire_and_enqueue` — while `ZCARD(allowed) < concurrency`, pop the oldest waiting
+  job, add it to `allowed`, push it onto its origin queue and mark it `queued`. Stale
+  entries are dropped. Returns the promoted ids.
 - `release_and_enqueue` — remove a job from `allowed`, then run the same
   acquire logic. The release script is the acquire script with one `ZREM` prepended —
   a single shared body, so the two can't drift.
 
 Each operation runs as a single Lua script, so the capacity check and the promotion
-execute atomically in Redis and cannot interleave across concurrent workers.
+execute atomically in Redis and cannot interleave across concurrent workers. The
+promoted job is only known inside the script, so it builds the job and queue keys from
+the `Job` and `Queue` key prefixes passed as arguments. Enqueueing a rate-limited job
+is rejected when its job class or queue class overrides those prefixes.
+
+The scheduler and the ready-jobs path queue the acquire script on their own pipelines,
+so promotion runs in the same transaction as the job's writes. `enqueue()` rejects a
+caller pipeline, because saving the returned job on that pipeline afterwards would
+overwrite the promoted status.
 
 ## Interactions Worth Knowing
 
-- **Retries** — an immediate retry (interval 0) keeps its slot and reruns on it. A
-  delayed retry releases the slot — it may sit scheduled for hours, and holding a slot
-  that long would starve the key — then re-acquires when due.
-- **Cancel and delete** — both remove the job from the rate limit sets and promote the
-  next waiting job.
+- **Retries and repeats** — a job holds its slot only while `queued` or `started`
+  (`rate_limit.release_slot`). An immediate retry or repeat keeps its slot; a
+  scheduled one releases it and re-acquires one when due.
+- **Cancel and delete** — both remove the job from the rate limit sets and fill free
+  slots with waiting jobs, but a job with a live execution keeps its slot until the
+  execution ends. Deleting through a caller pipeline keeps the slot until the execution
+  ends or cleanup finds no live execution; cancelling through one is rejected.
 
 ## Rate Limit Registry Cleanup
 
@@ -94,8 +105,9 @@ releasing it, and deferred promotions leave freed capacity while jobs are still
 waiting. `RateLimitRegistry.cleanup()` reconciles this. It runs as part of
 `clean_registries`, the periodic registry maintenance performed by workers, and:
 
-1. Releases stale `allowed` entries and attempts to promote a waiter after each release.
-2. Attempts another promotion in case capacity was freed elsewhere.
+1. Releases `allowed` entries whose job is missing or no longer queued or started,
+   filling free slots with waiting jobs after each release.
+2. Promotes waiting jobs into any remaining free slots.
 3. Deletes the registry once both sets are empty.
 
 ## Known Sharp Edges
@@ -103,10 +115,8 @@ waiting. `RateLimitRegistry.cleanup()` reconciles this. It runs as part of
 - **Per-key concurrency drift** — `concurrency` is stored once per key and the last
   registrant wins, but enqueue-time acquire uses the per-job value while release reads
   the stored config. Two jobs registering different values for the same key can
-  over-admit.
-- **Delayed retry placement** — `Retry(enqueue_at_front=True)` is not honored when a
-  delayed retry re-enters through the rate limiter; promotion uses the job's original
-  enqueue placement.
+  over-admit. Since one call fills every free slot, a job carrying a higher value can
+  admit several extra jobs at once.
 - **Returned job status can briefly lag** — `enqueue()` returns an in-memory job whose
   status can be stale if a concurrent release promoted it in a narrow window;
   `refresh()` corrects it.

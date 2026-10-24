@@ -71,7 +71,7 @@ That's it! Your jobs will now be automatically enqueued at the specified interva
 
 Key concepts:
 - **Interval based**: jobs run every X seconds (e.g. every 5 seconds).
-- **Cron based**: jobs run based on standard cron syntax (e.g. 0 9 * * * for daily at 9 AM)
+- **Cron based**: jobs run based on standard cron syntax (e.g. 0 9 * * * for daily at 9 AM) in the scheduler's local timezone
 - **Separation of concerns**: `CronScheduler` only enqueues jobs; RQ workers handle execution
 
 `CronScheduler` is not a job executor - it's a scheduler to periodically enqueue functions. When you run `rq cron`:
@@ -110,6 +110,11 @@ cron.register(frequent_task, queue_name='default', cron='*/15 * * * *')
 # Weekly on Sundays at 6:00 PM
 cron.register(weekly_report, queue_name='reports', cron='0 18 * * 0')
 ```
+
+Like system cron, cron strings use the local timezone of the scheduler process, which you can set with the `TZ` environment variable (e.g. `TZ=Asia/Jakarta rq cron cron_config.py`). On daylight saving time changes:
+
+- **Clocks go back**: ambiguous scheduled times use their first occurrence; the repeated occurrence doesn't create another run. Overdue jobs may still be enqueued during the repeated interval.
+- **Clocks go forward**: a selected occurrence inside the skipped gap shifts forward by the size of the clock change (e.g. with a one hour change, 2:30 AM runs at 3:30 AM). Scheduling resumes from the actual enqueue time, so intervening scheduled occurrences may be skipped.
 
 ## Webhooks
 

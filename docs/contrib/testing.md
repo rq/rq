@@ -46,4 +46,4 @@ Where you replace the `report_format` by the desired format (`term` / `html` / `
 
 If you rather use Vagrant, see [these instructions][v].
 
-[v]: {{site.baseurl}}contrib/vagrant/
+[v]: /contrib/vagrant/

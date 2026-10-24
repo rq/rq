@@ -3,15 +3,18 @@ from __future__ import annotations
 import contextlib
 import errno
 import os
+import pickle
 import signal
 import sys
 import time
 from random import shuffle
 from typing import TYPE_CHECKING
 
+from redis import SSLConnection
+
 from ..callbacks import execute_stopped_callback
 from ..connections import get_connection_kwargs
-from ..defaults import DEFAULT_WORKER_TTL
+from ..defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT, DEFAULT_WORKER_TTL
 from ..exceptions import InvalidJobOperation, ShutDownImminentException
 from ..job import Job, JobStatus
 from ..timeouts import HorseMonitorTimeoutException
@@ -175,56 +178,106 @@ class Worker(BaseWorker):
 
 
 class SpawnWorker(Worker):
-    """Worker implementation that uses os.spawn() instead of os.fork().
-    This implementation is intended for environments where `os.fork()` is not available.
+    """Worker implementation that uses `os.posix_spawn()` instead of `os.fork()`.
+    This implementation is intended for POSIX environments where `os.fork()` is unsafe, like macOS.
     """
 
+    def bootstrap(
+        self,
+        logging_level: str | None = 'INFO',
+        date_format: str = DEFAULT_LOGGING_DATE_FORMAT,
+        log_format: str = DEFAULT_LOGGING_FORMAT,
+    ):
+        for obj in (type(self), self.job_class, self.queue_class, self.death_penalty_class, *self._exc_handlers):
+            if getattr(obj, '__module__', None) == '__main__':
+                raise ValueError(
+                    f'SpawnWorker cannot use {obj!r}: objects defined in __main__ are not importable by the work horse'
+                )
+        # Reject unpicklable configuration before registering or dequeuing work.
+        self._dump_worker_config()
+        super().bootstrap(logging_level, date_format, log_format)
+
+    def _dump_worker_config(self) -> bytes:
+        """Serialize the worker class and supported horse settings for this job."""
+        return pickle.dumps(
+            (
+                type(self),
+                {
+                    'job_class': self.job_class,
+                    'queue_class': self.queue_class,
+                    'death_penalty_class': self.death_penalty_class,
+                    '_exc_handlers': self._exc_handlers,
+                    'default_result_ttl': self.default_result_ttl,
+                    'job_monitoring_interval': self.job_monitoring_interval,
+                    'log_job_description': self.log_job_description,
+                    'log_result_lifespan': self.log_result_lifespan,
+                    'disable_default_exception_handler': self.disable_default_exception_handler,
+                },
+            )
+        )
+
     def fork_work_horse(self, job: Job, queue: Queue):
-        """Spawns a work horse to perform the actual work using os.spawn()."""
+        """Spawns a work horse to perform the actual work using `os.posix_spawn()`."""
         os.environ['RQ_WORKER_ID'] = self.name
+        os.environ['RQ_JOB_ID'] = job.id
         os.environ['RQ_EXECUTION_ID'] = self.execution.id  # type: ignore
 
         redis_kwargs = get_connection_kwargs(self.connection)
+        if 'path' in redis_kwargs:
+            redis_kwargs['unix_socket_path'] = redis_kwargs.pop('path')
+        if issubclass(self.connection.connection_pool.connection_class, SSLConnection):
+            # Redis() only uses the ssl_* settings, and SSLConnection, when ssl is set
+            redis_kwargs['ssl'] = True
         if redis_kwargs.get('retry'):
-            # Remove retry from connection kwargs to avoid issues with os.spawnv
+            # Remove retry from connection kwargs so they can be embedded in the child source
             del redis_kwargs['retry']
         if redis_kwargs.get('driver_info'):
             del redis_kwargs['driver_info']
 
-        child_pid = os.spawnv(
-            os.P_NOWAIT,
-            sys.executable,
-            [
-                sys.executable,
-                '-c',
-                f"""
+        worker_config_payload = self._dump_worker_config()
+        child_source = f"""
 import os
+import pickle
 import sys
+
+sys.path[:] = {sys.path!r}
+
 from redis import Redis
-from rq import Worker, Queue
-from rq.job import Job
 from rq.executions import Execution
+
+worker_class, worker_attributes = pickle.loads({worker_config_payload!r})
 
 # Recreate worker instance
 redis = Redis(**{redis_kwargs!r})
-worker = Worker.find_by_key({self.key!r}, connection=redis, serializer={self._serializer_arg!r})
+worker = worker_class.find_by_key(
+    {self.key!r},
+    connection=redis,
+    job_class=worker_attributes['job_class'],
+    queue_class=worker_attributes['queue_class'],
+    serializer={self._serializer_arg!r},
+)
 if not worker:
     sys.exit(1)
+for name, value in worker_attributes.items():
+    setattr(worker, name, value)
 
 # Reconstruct job, queue and execution objects
-job = Job.fetch({job.id!r}, connection=worker.connection, serializer=worker.serializer)
-queue = Queue({queue.name!r}, connection=worker.connection, serializer=worker.serializer)
-execution_id = os.environ["RQ_EXECUTION_ID"]
-worker.execution = Execution.fetch(execution_id, job.id, connection=worker.connection)
-worker.execution._job = job
+job = worker.job_class.fetch({job.id!r}, connection=worker.connection, serializer=worker.serializer)
+queue = worker.queue_class(
+    {queue.name!r},
+    connection=worker.connection,
+    job_class=worker.job_class,
+    serializer=worker.serializer,
+    death_penalty_class=worker.death_penalty_class,
+)
+execution = Execution.fetch(os.environ['RQ_EXECUTION_ID'], job.id, connection=worker.connection)
+execution._job = job
+worker.execution = execution
 
-# Set up work horse
-os.setpgrp()
-worker._is_horse = True
 worker.main_work_horse(job, queue)
-""",
-            ],
-        )
+"""
+        # setpgroup=0 puts the horse in its own process group before any of its code runs
+        child_pid = os.posix_spawn(sys.executable, [sys.executable, '-c', child_source], os.environ, setpgroup=0)
 
         self._horse_pid = child_pid
         self.procline(f'Spawned {child_pid} at {time.time()}')
