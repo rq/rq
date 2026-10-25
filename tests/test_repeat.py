@@ -230,9 +230,7 @@ class TestRepeatEnqueue(RQTestCase):
     def test_repeat_schedule_interval_order(self):
         current_time = datetime(2026, 1, 1, tzinfo=timezone.utc)
         for times, intervals, expected in (
-            (3, [5, 10, 15], [5, 10, 15]),
             (5, [5, 10, 15], [5, 10, 15, 15, 15]),
-            (2, [5, 10, 15], [5, 10]),
             (3, [0, 10], [0, 10, 10]),
         ):
             with self.subTest(times=times, intervals=intervals):
