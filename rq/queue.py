@@ -973,6 +973,9 @@ class Queue:
                 self._enqueue_job(job, pipeline=pipe, at_front=job.enqueue_at_front)
                 for job in jobs_with_met_dependencies
             ]
+            # As in setup_dependencies(), deferred jobs expire after their ttl
+            for job in jobs_with_unmet_dependencies:
+                job.cleanup(ttl=job.ttl, pipeline=pipe)
             if pipeline is None:
                 pipe.execute()
 
