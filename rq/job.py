@@ -1936,10 +1936,10 @@ class Retry:
                 raise ValueError('interval: negative numbers are not allowed')
             intervals = [interval]
         elif isinstance(interval, Iterable):
-            for i in interval:
+            intervals = list(interval)
+            for i in intervals:
                 if i < 0:
                     raise ValueError('interval: negative numbers are not allowed')
-            intervals = list(interval)
 
         self.max = max
         self.intervals = intervals
