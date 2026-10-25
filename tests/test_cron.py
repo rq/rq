@@ -287,6 +287,12 @@ class TestCronScheduler(RQTestCase):
         # Verify the global registry is cleared after loading
         self.assertEqual(len(_job_data_registry), 0)
 
+    def test_load_config_from_file_with_leading_dot_slash(self):
+        """A relative file path starting with './' loads like one without it"""
+        scheduler = CronScheduler(connection=self.connection)
+        scheduler.load_config_from_file('./tests/cron_config.py')
+        self.assertEqual(len(scheduler.get_jobs()), 4)
+
     def test_cron_config_path_finding_method(self):  # Renamed test
         """Test different ways to load cron configuration files using the instance method"""
         # Ensure the test directory is findable if running tests from elsewhere
