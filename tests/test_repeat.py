@@ -271,9 +271,11 @@ class TestWorkerRepeat(RQTestCase):
             return result
 
         current_time = datetime(2026, 1, 1, tzinfo=timezone.utc)
-        with mock.patch.object(Queue, 'move_dependents_to_ready', add_dependency):
-            with mock.patch('rq.repeat.now', return_value=current_time):
-                worker.work(burst=True, max_jobs=1)
+        with (
+            mock.patch.object(Queue, 'move_dependents_to_ready', add_dependency),
+            mock.patch('rq.repeat.now', return_value=current_time),
+        ):
+            worker.work(burst=True, max_jobs=1)
 
         self.assertTrue(added_dependency)
         job.refresh()
