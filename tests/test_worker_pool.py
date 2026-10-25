@@ -12,7 +12,7 @@ from rq.worker_pool import WorkerPool, run_worker
 from tests import RQTestCase
 from tests.fixtures import (
     CustomJob,
-    PrefixedQueue,
+    CustomQueue,
     _send_shutdown_command,
     add_meta,
     div_by_zero,
@@ -180,10 +180,10 @@ class TestWorkerPool(RQTestCase):
 
     def test_queue_class_propagated_to_workers(self):
         """Ensure queue_class is passed to workers spawned by the pool"""
-        queue = PrefixedQueue('foo', connection=self.connection)
+        queue = CustomQueue('foo', connection=self.connection)
         job = queue.enqueue(say_hello)
 
-        pool = WorkerPool([queue], connection=self.connection, num_workers=1, queue_class=PrefixedQueue)
+        pool = WorkerPool([queue], connection=self.connection, num_workers=1, queue_class=CustomQueue)
         try:
             pool.start(burst=True)
 

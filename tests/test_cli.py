@@ -20,7 +20,7 @@ from rq.serializers import JSONSerializer
 from rq.timeouts import UnixSignalDeathPenalty
 from rq.worker import Worker, WorkerStatus
 from tests import RQTestCase
-from tests.fixtures import PrefixedQueue, div_by_zero, say_hello
+from tests.fixtures import CustomQueue, div_by_zero, say_hello
 
 
 class CLITestCase(RQTestCase):
@@ -884,12 +884,12 @@ class WorkerPoolCLITestCase(CLITestCase):
         self.assertNotEqual(result.exit_code, 0)
 
     def test_queue_class_argument(self):
-        """rq worker-pool -u <url> -b --queue-class tests.fixtures.PrefixedQueue"""
-        queue = PrefixedQueue('default', connection=self.connection)
+        """rq worker-pool -u <url> -b --queue-class tests.fixtures.CustomQueue"""
+        queue = CustomQueue('default', connection=self.connection)
         job = queue.enqueue(say_hello)
         runner = CliRunner()
         result = runner.invoke(
-            main, ['worker-pool', '-u', self.redis_url, '-b', '--queue-class', 'tests.fixtures.PrefixedQueue']
+            main, ['worker-pool', '-u', self.redis_url, '-b', '--queue-class', 'tests.fixtures.CustomQueue']
         )
         self.assert_normal_execution(result)
         self.assertEqual(job.get_status(refresh=True), JobStatus.FINISHED)

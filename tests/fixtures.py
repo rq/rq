@@ -414,11 +414,7 @@ class CustomJob(Job):
 
 
 class CustomQueue(Queue):
-    """A custom queue class just to test it"""
-
-
-class PrefixedQueue(Queue):
-    """A custom queue class with its own key prefix"""
+    """A custom queue class just to test it, with its own key prefix"""
 
     redis_queue_namespace_prefix = 'custom:queue:'
 
