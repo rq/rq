@@ -414,7 +414,9 @@ class CustomJob(Job):
 
 
 class CustomQueue(Queue):
-    """A custom queue class just to test it"""
+    """A custom queue class just to test it, with its own key prefix"""
+
+    redis_queue_namespace_prefix = 'custom:queue:'
 
 
 class CustomDeathPenalty(UnixSignalDeathPenalty):
