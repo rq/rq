@@ -60,6 +60,17 @@ class TestRetry(RQTestCase):
         self.assertRaises(ValueError, Retry, max=1, interval=-5)
         self.assertRaises(ValueError, Retry, max=1, interval=[1, -5])
 
+    def test_retry_interval_from_iterator(self):
+        """Retry keeps intervals given as a one-shot iterator"""
+        retry = Retry(max=2, interval=(i for i in [10, 20]))
+        self.assertEqual(retry.intervals, [10, 20])
+        self.assertRaises(ValueError, Retry, max=1, interval=iter([1, -5]))
+
+        queue = Queue(connection=self.connection)
+        job = queue.enqueue(div_by_zero, retry=retry)
+        Worker([queue], connection=self.connection).work(burst=True)
+        self.assertEqual(job.get_status(), JobStatus.SCHEDULED)
+
     def test_retry_repr(self):
         """Retry repr is stable and human-readable"""
         self.assertEqual(repr(Retry(max=1)), 'Retry(max=1, interval=0, enqueue_at_front=False)')
