@@ -1500,6 +1500,8 @@ class BaseWorker:
         self.log.debug('Worker %s: handling successful execution of job %s', self.name, job.id)
 
         with self.connection.pipeline() as pipeline:
+            repeats_left = job.repeats_left
+            repeat_intervals = job.repeat_intervals
             while True:
                 try:
                     # execute() raises WatchError if a dependent is added after
@@ -1568,6 +1570,8 @@ class BaseWorker:
                     self.log.debug('Worker %s: finished handling successful execution of job %s', self.name, job.id)
                     break
                 except redis.exceptions.WatchError:
+                    job.repeats_left = repeats_left
+                    job.repeat_intervals = repeat_intervals
                     continue
 
     def handle_execution_ended(self, job: Job, queue: Queue, heartbeat_ttl: int):

@@ -96,12 +96,12 @@ class Repeat:
 
         pipe = pipeline if pipeline is not None else job.connection.pipeline()
 
-        # Get the interval for this repeat based on remaining repeats
-        repeat_count = job.repeats_left - 1  # Count from the end (0-indexed)
         interval = 0
 
         if job.repeat_intervals:
-            interval = cls.get_interval(repeat_count, job.repeat_intervals)
+            interval = cls.get_interval(0, job.repeat_intervals)
+            if len(job.repeat_intervals) > 1:
+                job.repeat_intervals = job.repeat_intervals[1:]
 
         # Decrement repeats_left
         job.repeats_left = job.repeats_left - 1
