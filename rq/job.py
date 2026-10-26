@@ -1738,6 +1738,7 @@ class Job:
         )
         retry_interval = Retry.get_interval(self.number_of_retries or 0, retry.intervals)
         self.number_of_retries = 1 if not self.number_of_retries else self.number_of_retries + 1
+        self.enqueue_at_front_on_retry = self.enqueue_at_front_on_retry or retry.enqueue_at_front
         if retry_interval:
             scheduled_datetime = now() + timedelta(seconds=retry_interval)
             self.set_status(JobStatus.SCHEDULED)
@@ -1749,7 +1750,7 @@ class Job:
                 retry.max - (self.number_of_retries or 0),
             )
         else:
-            queue._enqueue_job(self, pipeline=pipeline)
+            queue._enqueue_job(self, pipeline=pipeline, at_front=self.enqueue_at_front_on_retry)
             self.log.info(
                 'Job %s: enqueued for retry, %s remaining',
                 self.id,
