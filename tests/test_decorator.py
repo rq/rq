@@ -90,6 +90,23 @@ class TestDecorator(RQTestCase):
         result = hello.enqueue()
         self.assertEqual(result.ttl, 30)
 
+    def test_decorator_enqueue_overrides_at_front(self):
+        for default in (False, True):
+            for override in (None, False, True):
+                with self.subTest(default=default, override=override):
+                    queue = Queue(f'priority-{default}-{override}', connection=self.connection)
+
+                    @job(queue, connection=self.connection, at_front=default)
+                    def hello():
+                        return 'Hello'
+
+                    backlog = queue.enqueue(hello)
+                    kwargs = {} if override is None else {'at_front': override}
+                    result = hello.enqueue(**kwargs)
+                    at_front = default if override is None else override
+                    expected = [result.id, backlog.id] if at_front else [backlog.id, result.id]
+                    self.assertEqual(queue.job_ids, expected)
+
     def test_decorator_accepts_meta_as_argument(self):
         """Ensure that passing in meta to the decorator sets the meta on the job"""
         # Ensure default
