@@ -1491,7 +1491,7 @@ class Queue:
             execute_failure_callback(job, self.death_penalty_class, *sys.exc_info())
             job.send_webhooks(JobStatus.FAILED, exc_string=exc_string)
         else:
-            execute_success_callback(job, self.death_penalty_class, job.return_value())
+            execute_success_callback(job, self.death_penalty_class, job._result)
             job.send_webhooks(JobStatus.FINISHED)
 
         return job
