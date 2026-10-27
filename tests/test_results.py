@@ -2,7 +2,7 @@ import tempfile
 import time
 from datetime import timedelta
 
-from rq.defaults import UNSERIALIZABLE_RETURN_VALUE_PAYLOAD
+from rq.defaults import DEFAULT_FAILURE_TTL, UNSERIALIZABLE_RETURN_VALUE_PAYLOAD
 from rq.executions import prepare_execution
 from rq.job import Job, Retry
 from rq.queue import Queue
@@ -241,6 +241,28 @@ class TestResult(RQTestCase):
         self.assertEqual(result.execution_id, execution.id)
         self.assertEqual(result.execution_ended_at, job.ended_at)
         self.assertIsNotNone(result.execution_started_at)
+
+    def test_failure_results_default_ttl(self):
+        """Without failure_ttl, failure results expire after DEFAULT_FAILURE_TTL, like the failed job"""
+        queue = Queue(connection=self.connection)
+        job = queue.enqueue(div_by_zero)
+        Worker([queue], connection=self.connection).work(burst=True)
+        self.assertEqual(job.latest_result().type, Result.Type.FAILED)
+        self.assertAlmostEqual(self.connection.ttl(Result.get_key(job.id)), DEFAULT_FAILURE_TTL, delta=10)
+
+        retry = Retry(max=1)
+        for create_result in (Result.create_retried, Result.create_max_retries_exceeded):
+            job = queue.enqueue(say_hello)
+            create_result(
+                job,
+                ttl=None,
+                return_value=retry,
+                worker_name='a',
+                execution_id='exec-1',
+                execution_started_at=now(),
+                execution_ended_at=now(),
+            )
+            self.assertAlmostEqual(self.connection.ttl(Result.get_key(job.id)), DEFAULT_FAILURE_TTL, delta=10)
 
     def test_job_return_value(self):
         """Test job.return_value"""

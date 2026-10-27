@@ -8,7 +8,7 @@ from typing import Any
 
 from redis import Redis
 
-from .defaults import RQ_KEY_PREFIX, UNSERIALIZABLE_RETURN_VALUE_PAYLOAD
+from .defaults import DEFAULT_FAILURE_TTL, RQ_KEY_PREFIX, UNSERIALIZABLE_RETURN_VALUE_PAYLOAD
 from .job import Job
 from .serializers import resolve_serializer
 from .utils import decode_redis_hash, now
@@ -114,7 +114,7 @@ class Result:
             execution_started_at=execution_started_at,
             execution_ended_at=execution_ended_at,
         )
-        result.save(ttl=ttl, pipeline=pipeline)
+        result.save(ttl=DEFAULT_FAILURE_TTL if ttl is None else ttl, pipeline=pipeline)
         return result
 
     @classmethod
@@ -132,7 +132,7 @@ class Result:
         return cls.create(
             job,
             cls.Type.RETRIED,
-            ttl,
+            DEFAULT_FAILURE_TTL if ttl is None else ttl,
             return_value=return_value,
             worker_name=worker_name,
             pipeline=pipeline,
@@ -156,7 +156,7 @@ class Result:
         return cls.create(
             job,
             cls.Type.MAX_RETRIES_EXCEEDED,
-            ttl,
+            DEFAULT_FAILURE_TTL if ttl is None else ttl,
             return_value=return_value,
             worker_name=worker_name,
             pipeline=pipeline,
