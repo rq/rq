@@ -966,8 +966,9 @@ class Queue:
                 pipe.execute()
 
             # Enqueue the jobs whose dependencies have been met
-            at_front_job_ids = {
-                job.id
+            # By object, not job id: two entries may share an explicit job_id
+            at_front_jobs = {
+                id(job)
                 for job, job_data in zip(jobs_with_dependencies, job_datas_with_dependencies)
                 if job_data.at_front
             }
@@ -975,7 +976,7 @@ class Queue:
                 jobs_with_dependencies, pipeline=pipe
             )
             jobs_with_met_dependencies = [
-                self._enqueue_job(job, pipeline=pipe, at_front=job.enqueue_at_front or job.id in at_front_job_ids)
+                self._enqueue_job(job, pipeline=pipe, at_front=job.enqueue_at_front or id(job) in at_front_jobs)
                 for job in jobs_with_met_dependencies
             ]
             # As in setup_dependencies(), deferred jobs expire after their ttl
