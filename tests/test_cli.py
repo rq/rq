@@ -619,6 +619,22 @@ class TestRQCli(CLITestCase):
 
         self.assertFalse(worker.work(True))
 
+    def test_cli_enqueue_schedule_at_front(self):
+        """rq enqueue --at-front --schedule-at puts the job at the front of the queue when it is due"""
+        queue = Queue(connection=self.connection)
+        queued_job = queue.enqueue(say_hello)
+
+        runner = CliRunner()
+        for job_id, options in (('at-front', ['--at-front']), ('at-back', [])):
+            args = ['enqueue', '-u', self.redis_url, '--job-id', job_id, '--schedule-at', '2021-01-01T00:00:00']
+            result = runner.invoke(main, [*args, *options, 'tests.fixtures.say_hello'])
+            self.assert_normal_execution(result)
+
+        scheduler = RQScheduler(queue, self.connection)
+        scheduler.acquire_locks()
+        scheduler.enqueue_scheduled_jobs()
+        self.assertEqual(queue.get_job_ids(), ['at-front', queued_job.id, 'at-back'])
+
     def test_cli_enqueue_retry(self):
         """rq enqueue -u <url> tests.fixtures.say_hello --retry-max 3 --retry-interval 10 --retry-interval 20
         --retry-interval 40"""

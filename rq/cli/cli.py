@@ -260,6 +260,8 @@ def enqueue(
             JobStatus.SCHEDULED,
             retry,
         )
+        if at_front:
+            job.enqueue_at_front = True
         queue.schedule_job(job, schedule)
 
     if not quiet:
