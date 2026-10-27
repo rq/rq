@@ -226,7 +226,9 @@ def enqueue(
 
     schedule = parse_schedule(schedule_in, schedule_at)
 
-    queue = cli_config.queue_class(queue, serializer=serializer, connection=cli_config.connection)
+    queue = cli_config.queue_class(
+        queue, connection=cli_config.connection, job_class=cli_config.job_class, serializer=serializer
+    )
 
     if schedule is None:
         job = queue.enqueue_call(

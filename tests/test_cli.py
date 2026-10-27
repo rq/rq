@@ -20,7 +20,7 @@ from rq.serializers import JSONSerializer
 from rq.timeouts import UnixSignalDeathPenalty
 from rq.worker import Worker, WorkerStatus
 from tests import RQTestCase
-from tests.fixtures import CustomQueue, div_by_zero, say_hello
+from tests.fixtures import CustomJob, CustomQueue, div_by_zero, say_hello
 
 
 class CLITestCase(RQTestCase):
@@ -501,6 +501,21 @@ class TestRQCli(CLITestCase):
         self.assertEqual(
             Job(job_id, serializer=JSONSerializer, connection=self.connection).result, 'Hi there, Stranger!'
         )
+
+    def test_cli_enqueue_with_job_class(self):
+        """rq enqueue -u <url> --job-class tests.fixtures.CustomJob tests.fixtures.say_hello"""
+        runner = CliRunner()
+        args = ['enqueue', '-u', self.redis_url, '--job-class', 'tests.fixtures.CustomJob', '--job-id', 'custom']
+        with patch.object(CustomJob, 'redis_job_namespace_prefix', 'custom:job:'):
+            result = runner.invoke(main, [*args, 'tests.fixtures.say_hello'])
+            self.assert_normal_execution(result)
+            self.assertTrue(self.connection.exists('custom:job:custom'))
+            self.assertFalse(self.connection.exists('rq:job:custom'))
+
+            queue = Queue(connection=self.connection, job_class=CustomJob)
+            worker = Worker(queue, connection=self.connection, job_class=CustomJob)
+            worker.work(burst=True)
+            self.assertEqual(CustomJob.fetch('custom', connection=self.connection).result, 'Hi there, Stranger!')
 
     def test_cli_enqueue_args(self):
         """rq enqueue -u <url> tests.fixtures.echo hello ':[1, {"key": "value"}]' json:=["abc"] nojson=def"""
