@@ -17,13 +17,7 @@ from rq.utils import current_timestamp, utcformat
 from rq.worker import Worker
 from tests import RQTestCase, find_empty_redis_database, ssl_test, system_timezone
 
-from .fixtures import CustomQueue, kill_worker, say_hello
-
-
-class PrefixedJob(Job):
-    """A job class that stores its jobs under its own key prefix"""
-
-    redis_job_namespace_prefix = 'prefixed:job:'
+from .fixtures import CustomJob, CustomQueue, kill_worker, say_hello
 
 
 class CustomRedisConnection(redis.Connection):
@@ -563,17 +557,18 @@ class TestWorker(RQTestCase):
 
     def test_work_burst_with_job_class(self):
         """The scheduler fetches scheduled jobs with the worker's job_class"""
-        queue = Queue(connection=self.connection, job_class=PrefixedJob)
-        job = queue.enqueue_at(datetime(2019, 1, 1, tzinfo=timezone.utc), say_hello)
-        self.assertEqual(job.get_status(), JobStatus.SCHEDULED)
+        with mock.patch.object(CustomJob, 'redis_job_namespace_prefix', 'custom:job:'):
+            queue = Queue(connection=self.connection, job_class=CustomJob)
+            job = queue.enqueue_at(datetime(2019, 1, 1, tzinfo=timezone.utc), say_hello)
+            self.assertEqual(job.get_status(), JobStatus.SCHEDULED)
 
-        worker = Worker([queue], connection=self.connection, job_class=PrefixedJob)
-        worker.work(burst=True, with_scheduler=True)
+            worker = Worker([queue], connection=self.connection, job_class=CustomJob)
+            worker.work(burst=True, with_scheduler=True)
 
-        job.refresh()
-        self.assertEqual(job.get_status(), JobStatus.FINISHED)
-        self.assertEqual(len(ScheduledJobRegistry(queue=queue)), 0)
-        self.assertIn(job.id, FinishedJobRegistry(queue=queue, job_class=PrefixedJob).get_job_ids())
+            job.refresh()
+            self.assertEqual(job.get_status(), JobStatus.FINISHED)
+            self.assertEqual(len(ScheduledJobRegistry(queue=queue)), 0)
+            self.assertIn(job.id, FinishedJobRegistry(queue=queue, job_class=CustomJob).get_job_ids())
 
     def test_work_burst_with_queue_class(self):
         """The scheduler enqueues due jobs with the worker's queue_class"""
