@@ -2,9 +2,10 @@ import os
 import signal
 from multiprocessing import Process
 from time import sleep
+from unittest.mock import patch
 
 from rq.connections import get_connection_kwargs, parse_connection
-from rq.job import Job, JobStatus
+from rq.job import JobStatus
 from rq.queue import Queue
 from rq.registry import StartedJobRegistry
 from rq.serializers import JSONSerializer
@@ -20,10 +21,6 @@ from tests.fixtures import (
     long_running_job,
     say_hello,
 )
-
-
-class PrefixedJob(Job):
-    redis_job_namespace_prefix = 'custom:job:'
 
 
 def wait_and_send_shutdown_signal(pid, time_to_wait=0.0):
@@ -198,20 +195,21 @@ class TestWorkerPool(RQTestCase):
 
     def test_queues_use_job_class(self):
         """Ensure WorkerPool.queues are built with the pool's job class"""
-        pool = WorkerPool(['foo'], connection=self.connection, job_class=PrefixedJob)
-        self.assertIs(pool.queues[0].job_class, PrefixedJob)
+        pool = WorkerPool(['foo'], connection=self.connection, job_class=CustomJob)
+        self.assertIs(pool.queues[0].job_class, CustomJob)
 
     def test_run_worker_cleans_abandoned_jobs_of_a_custom_job_class(self):
         """Ensure run_worker() builds its queues with the job class, so startup cleanup can find the job"""
-        queue = Queue('foo', connection=self.connection, job_class=PrefixedJob)
-        job = queue.enqueue(say_hello)
-        queue.remove(job)
-        job.set_status(JobStatus.STARTED)
-        registry = StartedJobRegistry('foo', connection=self.connection, job_class=PrefixedJob)
-        self.connection.zadd(registry.key, {f'{job.id}:execution': 1})
+        with patch.object(CustomJob, 'redis_job_namespace_prefix', 'custom:job:'):
+            queue = Queue('foo', connection=self.connection, job_class=CustomJob)
+            job = queue.enqueue(say_hello)
+            queue.remove(job)
+            job.set_status(JobStatus.STARTED)
+            registry = StartedJobRegistry('foo', connection=self.connection, job_class=CustomJob)
+            self.connection.zadd(registry.key, {f'{job.id}:execution': 1})
 
-        connection_class, pool_class, pool_kwargs = parse_connection(self.connection)
-        run_worker('test-worker', ['foo'], connection_class, pool_class, pool_kwargs, job_class=PrefixedJob)
+            connection_class, pool_class, pool_kwargs = parse_connection(self.connection)
+            run_worker('test-worker', ['foo'], connection_class, pool_class, pool_kwargs, job_class=CustomJob)
 
-        self.assertEqual(job.get_status(refresh=True), JobStatus.FAILED)
-        self.assertIn(job.id, queue.failed_job_registry.get_job_ids())
+            self.assertEqual(job.get_status(refresh=True), JobStatus.FAILED)
+            self.assertIn(job.id, queue.failed_job_registry.get_job_ids())
