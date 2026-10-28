@@ -935,7 +935,13 @@ class Queue:
         # Partition in one pass so that job_datas can be a one-shot iterable.
         job_datas_without_dependencies = []
         job_datas_with_dependencies = []
+        job_ids = set()
         for job_data in job_datas:
+            # Two entries with the same job_id would be saved to the same key, losing one of them
+            if job_data.job_id is not None:
+                if job_data.job_id in job_ids:
+                    raise ValueError(f"Job ID '{job_data.job_id}' appears more than once in enqueue_many()")
+                job_ids.add(job_data.job_id)
             if job_data.depends_on:
                 job_datas_with_dependencies.append(job_data)
             else:
@@ -966,9 +972,8 @@ class Queue:
                 pipe.execute()
 
             # Enqueue the jobs whose dependencies have been met
-            # By object, not job id: two entries may share an explicit job_id
-            at_front_jobs = {
-                id(job)
+            at_front_job_ids = {
+                job.id
                 for job, job_data in zip(jobs_with_dependencies, job_datas_with_dependencies)
                 if job_data.at_front
             }
@@ -976,7 +981,7 @@ class Queue:
                 jobs_with_dependencies, pipeline=pipe
             )
             jobs_with_met_dependencies = [
-                self._enqueue_job(job, pipeline=pipe, at_front=job.enqueue_at_front or id(job) in at_front_jobs)
+                self._enqueue_job(job, pipeline=pipe, at_front=job.enqueue_at_front or job.id in at_front_job_ids)
                 for job in jobs_with_met_dependencies
             ]
             # As in setup_dependencies(), deferred jobs expire after their ttl
