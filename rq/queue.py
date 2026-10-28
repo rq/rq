@@ -899,10 +899,6 @@ class Queue:
         Returns:
             List[Job]: A list of enqueued jobs
         """
-        pipe = pipeline if pipeline is not None else self.connection.pipeline()
-
-        # Add Queue key set
-        pipe.sadd(self.redis_queues_keys, self.key)
 
         jobs_without_dependencies = []
         jobs_with_unmet_dependencies = []
@@ -934,11 +930,22 @@ class Queue:
         # Partition in one pass so that job_datas can be a one-shot iterable.
         job_datas_without_dependencies = []
         job_datas_with_dependencies = []
+        job_ids = set()
         for job_data in job_datas:
+            # Two entries with the same job_id would be saved to the same key, losing one of them
+            if job_data.job_id is not None:
+                if job_data.job_id in job_ids:
+                    raise ValueError(f"Job ID '{job_data.job_id}' appears more than once in enqueue_many()")
+                job_ids.add(job_data.job_id)
             if job_data.depends_on:
                 job_datas_with_dependencies.append(job_data)
             else:
                 job_datas_without_dependencies.append(job_data)
+
+        pipe = pipeline if pipeline is not None else self.connection.pipeline()
+
+        # Add Queue key set
+        pipe.sadd(self.redis_queues_keys, self.key)
 
         # Enqueue jobs without dependencies
         if job_datas_without_dependencies:
@@ -965,11 +972,16 @@ class Queue:
                 pipe.execute()
 
             # Enqueue the jobs whose dependencies have been met
+            at_front_job_ids = {
+                job.id
+                for job, job_data in zip(jobs_with_dependencies, job_datas_with_dependencies)
+                if job_data.at_front
+            }
             jobs_with_met_dependencies, jobs_with_unmet_dependencies = Dependency.get_jobs_with_met_dependencies(
                 jobs_with_dependencies, pipeline=pipe
             )
             jobs_with_met_dependencies = [
-                self._enqueue_job(job, pipeline=pipe, at_front=job.enqueue_at_front)
+                self._enqueue_job(job, pipeline=pipe, at_front=job.enqueue_at_front or job.id in at_front_job_ids)
                 for job in jobs_with_met_dependencies
             ]
             # As in setup_dependencies(), deferred jobs expire after their ttl

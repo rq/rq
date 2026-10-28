@@ -150,6 +150,20 @@ class TestDependencies(RQTestCase):
         self.assertEqual(jobs[0].get_status(), JobStatus.QUEUED)
         q.empty()
 
+    def test_enqueue_many_at_front_with_met_dependencies(self):
+        """enqueue_many() honors at_front for jobs whose dependencies are already met, as enqueue() does"""
+        q = Queue(connection=self.connection)
+        parent_job = q.enqueue(say_hello)
+        SimpleWorker([q], connection=q.connection).work(burst=True)
+        q.enqueue(say_hello, job_id='waiting')
+        q.enqueue_many(
+            [
+                Queue.prepare_data(say_hello, job_id='front', depends_on=parent_job, at_front=True),
+                Queue.prepare_data(say_hello, job_id='back', depends_on=parent_job),
+            ]
+        )
+        self.assertEqual(q.job_ids, ['front', 'waiting', 'back'])
+
     def test_enqueue_many_deferred_job_ttl(self):
         """enqueue_many() makes deferred jobs expire after their ttl, as enqueue() does"""
         q = Queue(connection=self.connection)
