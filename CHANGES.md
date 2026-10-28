@@ -1,4 +1,4 @@
-### RQ 3.0 (unreleased)
+### RQ 3.0 (2026-10-28)
 
 New Features:
 * Added [concurrency rate limits](https://python-rq.org/docs/#concurrency-rate-limits) via `queue.enqueue(func, rate_limit=RateLimit(...))`. Thanks @selwin!
