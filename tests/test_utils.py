@@ -338,6 +338,11 @@ class TestUtils(RQTestCase):
         # Edge cases
         self.assertEqual(normalize_config_path('app/test.config.py'), 'app.test.config')
 
+        # File paths with '.' segments, such as a leading './'
+        self.assertEqual(normalize_config_path('./config.py'), 'config')
+        self.assertEqual(normalize_config_path('./package/subpackage/module.py'), 'package.subpackage.module')
+        self.assertEqual(normalize_config_path('package/./module.py'), 'package.module')
+
         # Platform-specific path separators
         if os.name == 'nt':  # Windows
             self.assertEqual(normalize_config_path('app\\cron_config.py'), 'app.cron_config')
