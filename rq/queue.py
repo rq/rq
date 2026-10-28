@@ -604,7 +604,6 @@ class Queue:
                 None. Callable is deprecated.
             webhooks (Optional[Sequence[Webhook]], optional): Webhooks to send on matching terminal job statuses.
                 Defaults to None.
-            pipeline (Optional[Pipeline], optional): The Redis Pipeline. Defaults to None.
             group_id (Optional[str], optional): A group ID that the job is being added to. Defaults to None.
 
         Raises:
