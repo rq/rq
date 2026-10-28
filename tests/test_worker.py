@@ -108,6 +108,33 @@ class TestWorker(RQTestCase):
         self.assertIsNotNone(result)
         self.assertEqual(result.worker_name, w.name)
 
+    def test_bootstrap_failure_closes_running_subscription(self):
+        """A failed startup releases an already-running Redis subscription."""
+        worker = Worker('default', connection=self.connection)
+        received = threading.Event()
+        error = redis.exceptions.ConnectionError('startup failed')
+
+        def fail_after_subscription_started(state):
+            deadline = time.monotonic() + 5
+            while not received.is_set() and time.monotonic() < deadline:
+                self.connection.publish(worker.pubsub_channel_name, '{}')
+                received.wait(timeout=0.05)
+            self.assertTrue(received.is_set())
+            raise error
+
+        try:
+            with (
+                mock.patch.object(worker, 'handle_payload', side_effect=lambda message: received.set()),
+                mock.patch.object(worker, 'set_state', side_effect=fail_after_subscription_started),
+            ):
+                with self.assertRaises(redis.exceptions.ConnectionError) as exc_info:
+                    worker.work(burst=True)
+            self.assertIs(exc_info.exception, error)
+            self.assertFalse(worker.pubsub_thread.is_alive())
+            self.assertIsNone(worker.pubsub.connection)
+        finally:
+            worker.unsubscribe()
+
     def test_work_and_quit_custom_serializer(self):
         """Worker processes work, then quits."""
         fooq = Queue('foo', serializer=JSONSerializer, connection=self.connection)
