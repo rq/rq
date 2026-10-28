@@ -900,10 +900,6 @@ class Queue:
         Returns:
             List[Job]: A list of enqueued jobs
         """
-        pipe = pipeline if pipeline is not None else self.connection.pipeline()
-
-        # Add Queue key set
-        pipe.sadd(self.redis_queues_keys, self.key)
 
         jobs_without_dependencies = []
         jobs_with_unmet_dependencies = []
@@ -946,6 +942,11 @@ class Queue:
                 job_datas_with_dependencies.append(job_data)
             else:
                 job_datas_without_dependencies.append(job_data)
+
+        pipe = pipeline if pipeline is not None else self.connection.pipeline()
+
+        # Add Queue key set
+        pipe.sadd(self.redis_queues_keys, self.key)
 
         # Enqueue jobs without dependencies
         if job_datas_without_dependencies:

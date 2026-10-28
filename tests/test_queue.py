@@ -692,6 +692,19 @@ class TestQueue(RQTestCase):
         self.assertEqual(q.count, 0)
         self.assertFalse(self.connection.exists(Job.key_for('same')))
 
+        # Nothing is left on a caller's pipeline either, not even the queue registration
+        with self.connection.pipeline() as pipe:
+            with self.assertRaises(ValueError):
+                q.enqueue_many(
+                    [
+                        Queue.prepare_data(say_hello, job_id='same'),
+                        Queue.prepare_data(say_hello, job_id='same'),
+                    ],
+                    pipeline=pipe,
+                )
+            pipe.execute()
+        self.assertNotIn(q.name, [queue.name for queue in Queue.all(connection=self.connection)])
+
     def test_enqueue_many_with_generator(self):
         """A one-shot iterable preserves jobs with and without dependencies."""
         q = Queue(connection=self.connection)
