@@ -229,6 +229,7 @@ class Result:
             return_value=return_value,
             exc_string=exc_string,
             worker_name=worker_name,
+            serializer=serializer,
             execution_id=execution_id,
             execution_started_at=execution_started_at,
             execution_ended_at=execution_ended_at,
