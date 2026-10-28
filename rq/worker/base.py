@@ -1432,11 +1432,11 @@ class BaseWorker:
             with self.connection.pipeline() as pipeline:
                 job.set_status(JobStatus.FAILED, pipeline=pipeline)
                 self.cleanup_execution(job, pipeline=pipeline, execution=execution)
-                job.failed_job_registry.add(job, ttl=job.failure_ttl, exc_string='', pipeline=pipeline)
+                job.failed_job_registry.add(job, ttl=job.get_failure_ttl(), exc_string='', pipeline=pipeline)
 
                 Result.create_max_retries_exceeded(
                     job,
-                    job.failure_ttl,
+                    job.get_failure_ttl(),
                     return_value=retry,
                     worker_name=self.name,
                     pipeline=pipeline,

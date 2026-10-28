@@ -2,7 +2,7 @@ import tempfile
 import time
 from datetime import timedelta
 
-from rq.defaults import UNSERIALIZABLE_RETURN_VALUE_PAYLOAD
+from rq.defaults import DEFAULT_FAILURE_TTL, UNSERIALIZABLE_RETURN_VALUE_PAYLOAD
 from rq.executions import prepare_execution
 from rq.job import Job, Retry
 from rq.queue import Queue
@@ -12,7 +12,7 @@ from rq.utils import now
 from rq.worker import Worker
 from tests import RQTestCase, min_redis_version
 
-from .fixtures import div_by_zero, say_hello
+from .fixtures import div_by_zero, returns_retry, say_hello
 
 
 @min_redis_version((5, 0, 0))
@@ -241,6 +241,27 @@ class TestResult(RQTestCase):
         self.assertEqual(result.execution_id, execution.id)
         self.assertEqual(result.execution_ended_at, job.ended_at)
         self.assertIsNotNone(result.execution_started_at)
+
+    def test_failure_results_default_ttl(self):
+        """Without failure_ttl, failure results expire after DEFAULT_FAILURE_TTL, like the failed job"""
+        queue = Queue(connection=self.connection)
+        job = queue.enqueue(div_by_zero)
+        Worker([queue], connection=self.connection).work(burst=True)
+        self.assertEqual(job.latest_result().type, Result.Type.FAILED)
+        self.assertAlmostEqual(self.connection.ttl(Result.get_key(job.id)), DEFAULT_FAILURE_TTL, delta=10)
+
+        job = queue.enqueue(returns_retry)
+        Worker([queue], connection=self.connection).work(burst=True, max_jobs=1)
+        self.assertEqual(job.latest_result().type, Result.Type.RETRIED)
+        self.assertAlmostEqual(self.connection.ttl(Result.get_key(job.id)), DEFAULT_FAILURE_TTL, delta=10)
+
+        # The job has used up its retry, so this run is its first and only result
+        job = queue.enqueue(returns_retry)
+        job.number_of_retries = 1
+        job.save()
+        Worker([queue], connection=self.connection).work(burst=True)
+        self.assertEqual(job.latest_result().type, Result.Type.MAX_RETRIES_EXCEEDED)
+        self.assertAlmostEqual(self.connection.ttl(Result.get_key(job.id)), DEFAULT_FAILURE_TTL, delta=10)
 
     def test_job_return_value(self):
         """Test job.return_value"""
