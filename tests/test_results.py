@@ -12,7 +12,7 @@ from rq.utils import now
 from rq.worker import Worker
 from tests import RQTestCase, min_redis_version
 
-from .fixtures import div_by_zero, say_hello
+from .fixtures import div_by_zero, returns_retry, say_hello
 
 
 @min_redis_version((5, 0, 0))
@@ -250,19 +250,18 @@ class TestResult(RQTestCase):
         self.assertEqual(job.latest_result().type, Result.Type.FAILED)
         self.assertAlmostEqual(self.connection.ttl(Result.get_key(job.id)), DEFAULT_FAILURE_TTL, delta=10)
 
-        retry = Retry(max=1)
-        for create_result in (Result.create_retried, Result.create_max_retries_exceeded):
-            job = queue.enqueue(say_hello)
-            create_result(
-                job,
-                ttl=None,
-                return_value=retry,
-                worker_name='a',
-                execution_id='exec-1',
-                execution_started_at=now(),
-                execution_ended_at=now(),
-            )
-            self.assertAlmostEqual(self.connection.ttl(Result.get_key(job.id)), DEFAULT_FAILURE_TTL, delta=10)
+        job = queue.enqueue(returns_retry)
+        Worker([queue], connection=self.connection).work(burst=True, max_jobs=1)
+        self.assertEqual(job.latest_result().type, Result.Type.RETRIED)
+        self.assertAlmostEqual(self.connection.ttl(Result.get_key(job.id)), DEFAULT_FAILURE_TTL, delta=10)
+
+        # The job has used up its retry, so this run is its first and only result
+        job = queue.enqueue(returns_retry)
+        job.number_of_retries = 1
+        job.save()
+        Worker([queue], connection=self.connection).work(burst=True)
+        self.assertEqual(job.latest_result().type, Result.Type.MAX_RETRIES_EXCEEDED)
+        self.assertAlmostEqual(self.connection.ttl(Result.get_key(job.id)), DEFAULT_FAILURE_TTL, delta=10)
 
     def test_job_return_value(self):
         """Test job.return_value"""
