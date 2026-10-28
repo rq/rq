@@ -679,6 +679,32 @@ class TestQueue(RQTestCase):
             self.assertEqual(len(q), 3)
             self.assertEqual(q.job_ids, ['fake_job_id_3', 'fake_job_id_1', 'fake_job_id_2'])
 
+    def test_enqueue_many_rejects_duplicate_job_ids(self):
+        """enqueue_many() raises instead of saving two jobs to the same key"""
+        q = Queue(connection=self.connection)
+        with self.assertRaises(ValueError):
+            q.enqueue_many(
+                [
+                    Queue.prepare_data(say_hello, job_id='same'),
+                    Queue.prepare_data(say_hello, job_id='same'),
+                ]
+            )
+        self.assertEqual(q.count, 0)
+        self.assertFalse(self.connection.exists(Job.key_for('same')))
+
+        # Nothing is left on a caller's pipeline either, not even the queue registration
+        with self.connection.pipeline() as pipe:
+            with self.assertRaises(ValueError):
+                q.enqueue_many(
+                    [
+                        Queue.prepare_data(say_hello, job_id='same'),
+                        Queue.prepare_data(say_hello, job_id='same'),
+                    ],
+                    pipeline=pipe,
+                )
+            pipe.execute()
+        self.assertNotIn(q.name, [queue.name for queue in Queue.all(connection=self.connection)])
+
     def test_enqueue_many_with_generator(self):
         """A one-shot iterable preserves jobs with and without dependencies."""
         q = Queue(connection=self.connection)

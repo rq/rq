@@ -1,4 +1,4 @@
-### RQ 3.0 (unreleased)
+### RQ 3.0 (2026-10-28)
 
 New Features:
 * Added [concurrency rate limits](https://python-rq.org/docs/#concurrency-rate-limits) via `queue.enqueue(func, rate_limit=RateLimit(...))`. Thanks @selwin!
@@ -6,6 +6,12 @@ New Features:
 * Workers can now track multiple executions, exposed via `worker.get_current_executions()` and `worker.current_execution_count`. Thanks @selwin!
 * Added `send_stop_execution_command()` to stop a single execution of a job. Thanks @selwin!
 * `Execution` now stores its job ID. Thanks @selwin!
+* `SpawnWorker` now works with Unix sockets. Thanks @zhechen-cs!
+* RQ will now retry connecting to Redis on `TimeoutError`. Thanks @gotoUSA!
+* Officially support Python 3.15. Thanks @selwin!
+* `rq worker-pool` now supports `--queue-class` argument. Thanks @LindseyZ1205!
+* `Worker` now uses the more efficient `client_info()` instead of `client_list()` when available. Thanks @kylejn27!
+* `Group.clean_registries()` is now much more efficient. Thanks @kylejn27!
 
 Breaking Changes:
 * `SpawnWorker` now uses `os.posix_spawn()` and requires POSIX. Thanks @selwin!
@@ -34,6 +40,22 @@ Bug Fixes:
 * `StartedJobRegistry.cleanup()` now sends `failed` webhooks for abandoned jobs and no longer aborts when a failure callback raises. Thanks @selwin!
 * Event loops are now closed after coroutine jobs finish. Thanks @Kuang-xianxin!
 * You can now pass in `Iterable` to `queue.enqueue_many()`. Thanks @liuyinchu!
+* Fixed a bug where `enqueue_at_front` is not respected when job returns `Retry` result. Thanks @ericdelorefice!
+* `at_front` should be respected when enqueueing jobs with met dependencies during `enqueue_many()`. Thanks @ericdelorefice!
+* `rq enqueue` now properly handles `--job-class` argument. Thanks @LuisFigueroaG!
+* `rq enqueue` CLI command now properly handles `--at-front` when used in conjunction with `--schedule-in`. Thanks @ericdelorefice!
+* Fixed a bug where job result is not passed to success callbacks when jobs are synchronously with `result_ttl=0`. Thanks @nk-batman21!
+* Fixed `at_front` and `result_ttl` argument parsing when enqueueing a decorated function. Thanks @jipeng6036-del and @zhechen-cs!
+* Fixed a bug in repeat interval calculation when number of intervals is less than number of repeats. Thanks @zhechen-cs!
+* Fixed a bug where `ttl` is not expected when enqueueing a deferred job using `enqueue_many()`. Thanks @LindseyZ1205!
+* Fixed DST handling when a naive datetime is passed into `enqueue_at()`. Thanks @ericdelorefice!
+* `enqueue_at()` now respects pipeline argument. Thanks @Lindseyz1205!
+* Enqueuing a job with a `Dependency(allow_failure=True)` with an already failed dependency now works as expected. Thanks @LindseyZ1205!
+* `worker.maintain_heartbeats()` will no longer recreate a worker hash without TTL. Thanks @diegopasqualin-beyond!
+* `queue.get_job_ids(length=0)` now returns an empty list instead of all job IDs. Thanks @JackyHsu-X!
+* Fixed CronJob `kwargs` parsing. Thanks @LindseyZ1205!
+* Fixed a bug where workers may lose jobs while waiting for schedulers to stop. Thanks @laulauraluo!
+* `SpawnWorker` now works properly over SSL and Unix sockets. Thanks @LindseyZ1205 and @zhechen-cs!
 
 ### RQ 2.12.0 (2026-08-30)
 * Added `CronJobRegistry` so cron job histories can be monitored without an active `CronScheduler`. Thanks @selwin!
