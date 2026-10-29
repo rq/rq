@@ -291,7 +291,7 @@ the `Dependency` class that will allow you to dictate how to handle job failures
 The `Dependency(jobs=...)` parameter accepts:
 - a string representing a single job id
 - a Job object
-- an iteratable of job id strings and/or Job objects
+- an iterable of job id strings and/or Job objects
 - `enqueue_at_front` boolean parameter to put dependents at the front when they are enqueued
 
 Example:
