@@ -1110,7 +1110,7 @@ class BaseWorker:
         )
 
     def get_heartbeat_ttl(self, job: Job, working_time: float = 0.0) -> int:
-        """Get's the TTL for the next heartbeat.
+        """Gets the TTL for the next heartbeat.
 
         Args:
             job (Job): The Job
@@ -1683,7 +1683,7 @@ class BaseWorker:
         After fork()'ing, always assure we are generating random sequences
         that are different from the worker.
 
-        os._exit() is the way to exit from childs after a fork(), in
+        os._exit() is the way to exit from child processes after a fork(), in
         contrast to the regular sys.exit()
         """
         random.seed()

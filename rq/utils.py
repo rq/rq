@@ -502,7 +502,7 @@ def split_list(a_list: Sequence[_T], segment_size: int) -> Generator[Sequence[_T
         segment_size (int): The segment size to split into
 
     Yields:
-        list: The splitted listed
+        list: The split list
     """
     for i in range(0, len(a_list), segment_size):
         yield a_list[i : i + segment_size]
