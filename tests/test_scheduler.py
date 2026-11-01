@@ -9,8 +9,8 @@ import redis
 from rq import Queue
 from rq.defaults import DEFAULT_MAINTENANCE_TASK_INTERVAL
 from rq.exceptions import NoSuchJobError, SchedulerNotFound
-from rq.job import Job, Retry
-from rq.registry import FinishedJobRegistry, ScheduledJobRegistry
+from rq.job import Job, JobStatus, Retry
+from rq.registry import CanceledJobRegistry, FinishedJobRegistry, ScheduledJobRegistry
 from rq.scheduler import RQScheduler
 from rq.serializers import JSONSerializer
 from rq.utils import current_timestamp, utcformat
@@ -449,6 +449,82 @@ class TestScheduler(RQTestCase):
         registry.schedule(job, datetime(2100, 1, 1, tzinfo=timezone.utc))
         scheduler.enqueue_scheduled_jobs()
         self.assertEqual(len(queue), 1)
+
+    def _enqueue_scheduled_jobs_racing(self, scheduler, action):
+        """Run `scheduler.enqueue_scheduled_jobs()`, calling `action` once, right after the
+        scheduler has fetched the due jobs, to simulate another client acting on them."""
+        fetch_many = Job.fetch_many.__func__
+        calls = []
+
+        def fetch_many_then_act(cls, *args, **kwargs):
+            jobs = fetch_many(cls, *args, **kwargs)
+            if not calls:
+                calls.append(True)
+                action()
+            return jobs
+
+        with mock.patch.object(Job, 'fetch_many', classmethod(fetch_many_then_act)):
+            scheduler.enqueue_scheduled_jobs()
+        self.assertEqual(len(calls), 1)
+
+    def _schedule_due_job(self):
+        queue = Queue(connection=self.connection)
+        job = queue.enqueue_at(datetime(2019, 1, 1, tzinfo=timezone.utc), say_hello)
+        scheduler = RQScheduler([queue], connection=self.connection)
+        scheduler.acquire_locks()
+        return queue, job, scheduler
+
+    def test_enqueue_scheduled_jobs_job_canceled_concurrently(self):
+        """A job canceled while the scheduler enqueues it stays canceled"""
+        queue, job, scheduler = self._schedule_due_job()
+
+        self._enqueue_scheduled_jobs_racing(scheduler, lambda: Job.fetch(job.id, connection=self.connection).cancel())
+
+        self.assertEqual(job.get_status(), JobStatus.CANCELED)
+        self.assertEqual(queue.job_ids, [])
+        self.assertIn(job.id, CanceledJobRegistry(queue=queue))
+        self.assertEqual(len(ScheduledJobRegistry(queue=queue)), 0)
+
+    def test_enqueue_scheduled_jobs_job_deleted_concurrently(self):
+        """A job deleted while the scheduler enqueues it is not recreated"""
+        queue, job, scheduler = self._schedule_due_job()
+
+        self._enqueue_scheduled_jobs_racing(scheduler, lambda: Job.fetch(job.id, connection=self.connection).delete())
+
+        self.assertFalse(self.connection.exists(job.key))
+        self.assertEqual(queue.job_ids, [])
+        self.assertEqual(len(ScheduledJobRegistry(queue=queue)), 0)
+
+    def test_enqueue_scheduled_jobs_job_rescheduled_concurrently(self):
+        """A job rescheduled to a later time while the scheduler enqueues it keeps its new time"""
+        queue, job, scheduler = self._schedule_due_job()
+        registry = ScheduledJobRegistry(queue=queue)
+        later = datetime(2100, 1, 1, tzinfo=timezone.utc)
+
+        self._enqueue_scheduled_jobs_racing(
+            scheduler, lambda: queue.schedule_job(Job.fetch(job.id, connection=self.connection), later)
+        )
+
+        self.assertEqual(queue.job_ids, [])
+        self.assertEqual(job.get_status(), JobStatus.SCHEDULED)
+        self.assertEqual(registry.get_job_ids(), [job.id])
+        self.assertEqual(registry.get_scheduled_time(job), later)
+
+    def test_enqueue_scheduled_jobs_job_updated_concurrently(self):
+        """A due job that changes while the scheduler enqueues it is still enqueued, with its changes"""
+        queue, job, scheduler = self._schedule_due_job()
+
+        def update_meta():
+            fetched = Job.fetch(job.id, connection=self.connection)
+            fetched.meta['progress'] = 1
+            fetched.save_meta()
+
+        self._enqueue_scheduled_jobs_racing(scheduler, update_meta)
+
+        self.assertEqual(queue.job_ids, [job.id])
+        self.assertEqual(job.get_status(), JobStatus.QUEUED)
+        self.assertEqual(Job.fetch(job.id, connection=self.connection).meta, {'progress': 1})
+        self.assertEqual(len(ScheduledJobRegistry(queue=queue)), 0)
 
     def test_prepare_registries(self):
         """prepare_registries() creates self._scheduled_job_registries"""
