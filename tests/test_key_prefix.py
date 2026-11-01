@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 from redis import Redis
 
+import rq.defaults
 from rq import Queue
 from rq.cron_scheduler_registry import get_registry_key
 from rq.defaults import RQ_KEY_PREFIX
@@ -56,8 +57,6 @@ class TestKeyPrefix(unittest.TestCase):
 
     def test_invalid_prefix_rejected(self):
         """Prefixes with characters unsafe in %-templates or Lua source fail at import."""
-        import rq.defaults
-
         try:
             for prefix in ('app%s', 'team"x', 'rq\n', ''):
                 with patch.dict(os.environ, {'RQ_KEY_PREFIX': prefix}):
