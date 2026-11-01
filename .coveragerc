@@ -1,5 +1,7 @@
 [run]
 source = rq
+# Measure the subprocesses tests spawn (pytest-cov 7 no longer does this)
+patch = subprocess
 omit =
     rq/contrib/legacy.py
     rq/local.py
