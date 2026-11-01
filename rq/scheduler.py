@@ -246,9 +246,9 @@ class RQScheduler:
 
         The due job ids are read before the jobs are enqueued, so a job can be canceled,
         deleted or rescheduled in between. The move therefore runs in a transaction that
-        watches the job keys (each of those operations writes to the job's hash), and
-        only enqueues jobs that are still due in `registry` once the keys are watched.
-        If a job changes before the transaction commits, the due jobs are read again.
+        watches the registry and the job keys, and only enqueues jobs that are still due
+        in `registry` once the keys are watched. If the registry or a job changes before
+        the transaction commits, the due jobs are read again.
         """
         queue = Queue(registry.name, connection=self.connection, serializer=self.serializer)
 
@@ -260,7 +260,7 @@ class RQScheduler:
                     return
 
                 try:
-                    pipeline.watch(*[Job.key_for(job_id) for job_id in job_ids])
+                    pipeline.watch(registry.key, *[Job.key_for(job_id) for job_id in job_ids])
                     due_jobs, missing_job_ids = self._fetch_due_jobs(registry, job_ids, timestamp)
 
                     pipeline.multi()
@@ -287,8 +287,8 @@ class RQScheduler:
     ) -> tuple[list[Job], list[str]]:
         """Fetch the jobs among `job_ids` that are still due in `registry`.
 
-        Must be called after the job keys are watched, so that anything read here that
-        changes before the transaction commits aborts it.
+        Must be called after the registry and job keys are watched, so that anything read
+        here that changes before the transaction commits aborts it.
 
         Returns:
             The jobs to enqueue, and the ids still in `registry` whose job no longer exists.

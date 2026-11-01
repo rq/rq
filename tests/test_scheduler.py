@@ -495,6 +495,18 @@ class TestScheduler(RQTestCase):
         self.assertEqual(queue.job_ids, [])
         self.assertEqual(len(ScheduledJobRegistry(queue=queue)), 0)
 
+    def test_enqueue_scheduled_jobs_job_removed_from_registry_concurrently(self):
+        """A job removed from the registry while the scheduler enqueues it is not enqueued,
+        even before its hash changes (`Job.delete()` removes it from the registry first)"""
+        queue, job, scheduler = self._schedule_due_job()
+        registry = ScheduledJobRegistry(queue=queue)
+
+        self._enqueue_scheduled_jobs_racing(scheduler, lambda: registry.remove(job))
+
+        self.assertEqual(queue.job_ids, [])
+        self.assertEqual(job.get_status(), JobStatus.SCHEDULED)
+        self.assertEqual(len(registry), 0)
+
     def test_enqueue_scheduled_jobs_job_rescheduled_concurrently(self):
         """A job rescheduled to a later time while the scheduler enqueues it keeps its new time"""
         queue, job, scheduler = self._schedule_due_job()
