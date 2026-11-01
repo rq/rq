@@ -53,6 +53,19 @@ class TestKeyPrefix(unittest.TestCase):
             ['{rq}:wip:default', '{rq}:failed:default', '{rq}:executions:job1', '{rq}:worker:w1:executions'],
         )
 
+    def test_slash_prefix_allowed(self):
+        """A namespaced prefix like `myapp/rq` is accepted and used as-is in keys."""
+        script = (
+            'from redis import Redis\n'
+            'from rq import Queue\n'
+            'from rq.registry import StartedJobRegistry\n'
+            'print(Queue("default", connection=Redis()).key)\n'
+            'print(StartedJobRegistry("default", connection=None).key)\n'
+        )
+        env = {**os.environ, 'RQ_KEY_PREFIX': 'myapp/rq'}
+        output = subprocess.run([sys.executable, '-c', script], env=env, capture_output=True, text=True, check=True)
+        self.assertEqual(output.stdout.splitlines(), ['myapp/rq:queue:default', 'myapp/rq:wip:default'])
+
     def test_invalid_prefix_rejected(self):
         """Prefixes with characters unsafe in %-templates or Lua source fail at import."""
         output = subprocess.run(
