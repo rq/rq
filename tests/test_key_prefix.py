@@ -87,3 +87,23 @@ class TestKeyPrefix(unittest.TestCase):
         )
         self.assertNotEqual(output.returncode, 0)
         self.assertIn('Invalid RQ_KEY_PREFIX', output.stderr)
+
+        # Namespaced prefixes like `myapp/rq` are allowed and used as-is in keys
+        script = (
+            'from redis import Redis\n'
+            'from rq import Queue\n'
+            'from rq.registry import FailedJobRegistry, StartedJobRegistry\n'
+            'print(Queue("default", connection=Redis()).key)\n'
+            'print(StartedJobRegistry("default", connection=None).key)\n'
+            'print(FailedJobRegistry("default", connection=None).key)\n'
+        )
+        output = subprocess.run(
+            [sys.executable, '-c', script],
+            env={**os.environ, 'RQ_KEY_PREFIX': 'myapp/rq'},
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        self.assertEqual(
+            output.stdout.splitlines(), ['myapp/rq:queue:default', 'myapp/rq:wip:default', 'myapp/rq:failed:default']
+        )
