@@ -1,5 +1,6 @@
 """Tests for RQ_KEY_PREFIX environment variable support."""
 
+import importlib
 import os
 import subprocess
 import sys
@@ -53,50 +54,19 @@ class TestKeyPrefix(unittest.TestCase):
             ['{rq}:wip:default', '{rq}:failed:default', '{rq}:executions:job1', '{rq}:worker:w1:executions'],
         )
 
-    def test_slash_prefix_allowed(self):
-        """A namespaced prefix like `myapp/rq` is accepted and used as-is in keys."""
-        script = (
-            'from redis import Redis\n'
-            'from rq import Queue\n'
-            'from rq.registry import StartedJobRegistry\n'
-            'print(Queue("default", connection=Redis()).key)\n'
-            'print(StartedJobRegistry("default", connection=None).key)\n'
-        )
-        env = {**os.environ, 'RQ_KEY_PREFIX': 'myapp/rq'}
-        output = subprocess.run([sys.executable, '-c', script], env=env, capture_output=True, text=True, check=True)
-        self.assertEqual(output.stdout.splitlines(), ['myapp/rq:queue:default', 'myapp/rq:wip:default'])
-
     def test_invalid_prefix_rejected(self):
         """Prefixes with characters unsafe in %-templates or Lua source fail at import."""
-        output = subprocess.run(
-            [sys.executable, '-c', 'import rq'],
-            env={**os.environ, 'RQ_KEY_PREFIX': 'app%s'},
-            capture_output=True,
-            text=True,
-        )
-        self.assertNotEqual(output.returncode, 0)
-        self.assertIn('Invalid RQ_KEY_PREFIX', output.stderr)
+        import rq.defaults
 
-        output = subprocess.run(
-            [sys.executable, '-c', 'import rq'],
-            env={**os.environ, 'RQ_KEY_PREFIX': 'team"x'},
-            capture_output=True,
-            text=True,
-        )
-        self.assertNotEqual(output.returncode, 0)
-        self.assertIn('Invalid RQ_KEY_PREFIX', output.stderr)
+        try:
+            for prefix in ('app%s', 'team"x', 'rq\n', ''):
+                with patch.dict(os.environ, {'RQ_KEY_PREFIX': prefix}):
+                    with self.assertRaisesRegex(ValueError, 'Invalid RQ_KEY_PREFIX'):
+                        importlib.reload(rq.defaults)
 
-        output = subprocess.run(
-            [sys.executable, '-c', 'import rq'],
-            env={**os.environ, 'RQ_KEY_PREFIX': 'rq\n'},
-            capture_output=True,
-            text=True,
-        )
-        self.assertNotEqual(output.returncode, 0)
-        self.assertIn('Invalid RQ_KEY_PREFIX', output.stderr)
-
-        output = subprocess.run(
-            [sys.executable, '-c', 'import rq'], env={**os.environ, 'RQ_KEY_PREFIX': ''}, capture_output=True, text=True
-        )
-        self.assertNotEqual(output.returncode, 0)
-        self.assertIn('Invalid RQ_KEY_PREFIX', output.stderr)
+            # Namespaced prefixes like `myapp/rq` are allowed
+            with patch.dict(os.environ, {'RQ_KEY_PREFIX': 'myapp/rq'}):
+                importlib.reload(rq.defaults)
+                self.assertEqual(rq.defaults.RQ_KEY_PREFIX, 'myapp/rq')
+        finally:
+            importlib.reload(rq.defaults)
