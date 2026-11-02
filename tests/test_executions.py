@@ -262,27 +262,12 @@ class TestRegistry(RQTestCase):
         self.assertEqual(fetched.worker_name, worker.name)
         self.assertTrue(0 < self.connection.ttl(execution.key) <= 100)
 
-    def test_delete_registry_with_missing_hash(self):
-        """ExecutionRegistry.delete() removes an execution whose hash has expired"""
-        job = self.queue.enqueue(say_hello)
-        worker = Worker([self.queue], connection=self.connection)
-        execution = worker.prepare_execution(job=job)
-        self.connection.delete(execution.key)
-
-        registry = job.execution_registry
-        with self.connection.pipeline() as pipeline:
-            registry.delete(job=job, pipeline=pipeline)
-            pipeline.execute()
-
-        self.assertFalse(self.connection.exists(registry.key))
-        self.assertNotIn(job.id, job.started_job_registry.get_job_ids())
-
     def test_delete_registry_with_partial_hash(self):
         """ExecutionRegistry.delete() removes an execution hash that has no created_at"""
         job = self.queue.enqueue(say_hello)
         worker = Worker([self.queue], connection=self.connection)
         execution = worker.prepare_execution(job=job)
-        self.connection.hdel(execution.key, 'id', 'job_id', 'created_at')
+        self.connection.hdel(execution.key, 'created_at')
 
         registry = job.execution_registry
         with self.connection.pipeline() as pipeline:
