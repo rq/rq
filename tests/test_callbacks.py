@@ -1,8 +1,10 @@
 from datetime import timedelta
+from functools import partial
 from unittest import mock
 
 from rq import Queue, Worker
 from rq.callbacks import execute_failure_callback, execute_stopped_callback, execute_success_callback
+from rq.exceptions import DeserializationError
 from rq.job import UNEVALUATED, Callback, Job, JobStatus
 from rq.serializers import JSONSerializer
 from rq.worker import SimpleWorker
@@ -23,14 +25,170 @@ from tests.fixtures import (
 )
 
 
+class CallbackRecorder:
+    def __init__(self, value):
+        self.value = value
+
+    def __bool__(self):
+        return False
+
+    def record(self, job, connection, *args):
+        job.meta['callback'] = (self.value, args)
+        connection.set(f'callback:{job.id}', self.value)
+
+    def __call__(self, job, connection, *args):
+        self.record(job, connection, *args)
+
+    @classmethod
+    def record_class(cls, job, connection, *args):
+        job.meta['callback'] = (cls.__name__, args)
+
+
+class InheritedCallbackRecorder(CallbackRecorder):
+    pass
+
+
+class AsyncCallbackRecorder:
+    async def __call__(self, job, connection, *args):
+        raise AssertionError('Async callbacks must not be invoked')
+
+
+class CallbackInstanceTestCase(RQTestCase):
+    def _assert_callback_roundtrip(self, callback, expected):
+        cases = (
+            ('success', execute_success_callback, ('result',)),
+            ('failure', execute_failure_callback, (ValueError, ValueError('error'), None)),
+            ('stopped', execute_stopped_callback, ()),
+        )
+        for kind, execute, args in cases:
+            with self.subTest(kind=kind):
+                job = Job.create(
+                    say_hello, connection=self.connection, **{f'on_{kind}': Callback(callback, timeout=17)}
+                )
+                job.save()
+                job = Job.fetch(job.id, connection=self.connection)
+                execute(job, SimpleWorker.death_penalty_class, *args)
+                self.assertEqual(job.meta['callback'], (expected, args))
+                self.assertEqual(getattr(job, f'{kind}_callback_timeout'), 17)
+
+    def test_class_method_callbacks(self):
+        self._assert_callback_roundtrip(InheritedCallbackRecorder.record_class, 'InheritedCallbackRecorder')
+
+    def test_bound_method_callbacks(self):
+        self._assert_callback_roundtrip(CallbackRecorder('method').record, 'method')
+
+    def test_callable_instance_callbacks(self):
+        self._assert_callback_roundtrip(CallbackRecorder('instance'), 'instance')
+
+    def test_falsey_callable_instance_callbacks(self):
+        cases = (
+            ('success', execute_success_callback, ('result',)),
+            ('failure', execute_failure_callback, (ValueError, ValueError('error'), None)),
+            ('stopped', execute_stopped_callback, ()),
+        )
+        for kind, execute, args in cases:
+            with self.subTest(kind=kind):
+                job = Job.create(
+                    say_hello,
+                    connection=self.connection,
+                    **{f'on_{kind}': CallbackRecorder(kind)},
+                )
+                job.save()
+                job = Job.fetch(job.id, connection=self.connection)
+                execute(job, SimpleWorker.death_penalty_class, *args)
+                self.assertEqual(job.meta['callback'], (kind, args))
+
+    def test_callback_state_is_saved_and_refreshed(self):
+        recorder = CallbackRecorder('initial')
+        job = Job.create(say_hello, connection=self.connection, on_success=Callback(recorder))
+        recorder.value = 'saved'
+        job.save()
+        restored = Job.fetch(job.id, connection=self.connection)
+        execute_success_callback(restored, SimpleWorker.death_penalty_class, 'result')
+        self.assertEqual(restored.meta['callback'], ('saved', ('result',)))
+
+        recorder.value = 'resaved'
+        job.save()
+        restored.refresh()
+        execute_success_callback(restored, SimpleWorker.death_penalty_class, 'result')
+        self.assertEqual(restored.meta['callback'], ('resaved', ('result',)))
+
+    def test_fetch_and_resave_do_not_deserialize_callbacks(self):
+        job = Job.create(say_hello, connection=self.connection, on_success=Callback(CallbackRecorder('pending')))
+        job.save()
+        with mock.patch.object(job.serializer, 'loads', side_effect=AssertionError('Eager deserialization')) as loads:
+            restored = Job.fetch(job.id, connection=self.connection)
+            restored.save()
+            loads.assert_not_called()
+
+        restored = Job.fetch(job.id, connection=self.connection)
+        execute_success_callback(restored, SimpleWorker.death_penalty_class, 'result')
+        self.assertEqual(restored.meta['callback'], ('pending', ('result',)))
+
+    def test_callback_uses_job_serializer(self):
+        job = Job.create(
+            say_hello,
+            connection=self.connection,
+            serializer=JSONSerializer,
+            on_success=Callback(CallbackRecorder('json')),
+        )
+        with self.assertRaises(TypeError):
+            job.to_dict()
+
+    def test_async_callable_callbacks_are_rejected(self):
+        cases = (
+            ('success', execute_success_callback, (None,)),
+            ('failure', execute_failure_callback, (ValueError, ValueError('error'), None)),
+            ('stopped', execute_stopped_callback, ()),
+        )
+        for kind, execute, args in cases:
+            with self.subTest(kind=kind):
+                job = Job.create(
+                    say_hello, connection=self.connection, **{f'on_{kind}': Callback(AsyncCallbackRecorder())}
+                )
+                job.save()
+                job = Job.fetch(job.id, connection=self.connection)
+                with self.assertRaises(TypeError):
+                    execute(job, SimpleWorker.death_penalty_class, *args)
+
+                job = Job.create(
+                    say_hello,
+                    connection=self.connection,
+                    **{f'on_{kind}': Callback(partial(AsyncCallbackRecorder()))},
+                )
+                job.save()
+                job = Job.fetch(job.id, connection=self.connection)
+                with self.assertRaises(TypeError):
+                    execute(job, SimpleWorker.death_penalty_class, *args)
+
+        job = Job.create(say_hello, connection=self.connection, on_success=Callback(partial(async_success_callback)))
+        with self.assertRaises(TypeError):
+            execute_success_callback(job, SimpleWorker.death_penalty_class, None)
+
+    def test_worker_executes_callable_callback(self):
+        queue = Queue(connection=self.connection)
+        job = queue.enqueue(say_hello, on_success=Callback(CallbackRecorder('worker')))
+        SimpleWorker([queue], connection=self.connection).work(burst=True)
+        self.assertEqual(job.get_status(), JobStatus.FINISHED)
+        self.assertEqual(self.connection.get(f'callback:{job.id}'), b'worker')
+
+    def test_callback_deserialization_error(self):
+        job = Job.create(say_hello, connection=self.connection, on_success=Callback(CallbackRecorder('broken')))
+        job.save()
+        job = Job.fetch(job.id, connection=self.connection)
+        with mock.patch.object(job.serializer, 'loads', side_effect=ValueError('Invalid callback data')):
+            with self.assertRaises(DeserializationError):
+                _ = job.success_callback
+
+
 class QueueCallbackTestCase(RQTestCase):
     def test_enqueue_with_success_callback(self):
         """Test enqueue* methods with on_success"""
         queue = Queue(connection=self.connection)
 
-        # Only functions and builtins are supported as callback
+        # Callback must be a callable or a string
         with self.assertRaises(ValueError):
-            queue.enqueue(say_hello, on_success=Job.fetch)
+            queue.enqueue(say_hello, on_success=42)
 
         job = queue.enqueue(say_hello, on_success=print)
 
@@ -57,9 +215,9 @@ class QueueCallbackTestCase(RQTestCase):
         """queue.enqueue* methods with on_failure is persisted correctly"""
         queue = Queue(connection=self.connection)
 
-        # Only functions and builtins are supported as callback
+        # Callback must be a callable or a string
         with self.assertRaises(ValueError):
-            queue.enqueue(say_hello, on_failure=Job.fetch)
+            queue.enqueue(say_hello, on_failure=42)
 
         job = queue.enqueue(say_hello, on_failure=print)
 
@@ -86,9 +244,9 @@ class QueueCallbackTestCase(RQTestCase):
         """queue.enqueue* methods with on_stopped is persisted correctly"""
         queue = Queue(connection=self.connection)
 
-        # Only functions and builtins are supported as callback
+        # Callback must be a callable or a string
         with self.assertRaises(ValueError):
-            queue.enqueue(say_hello, on_stopped=Job.fetch)
+            queue.enqueue(say_hello, on_stopped=42)
 
         job = queue.enqueue(long_process, on_stopped=print)
 
