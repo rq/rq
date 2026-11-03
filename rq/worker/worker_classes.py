@@ -17,7 +17,7 @@ from ..connections import get_connection_kwargs
 from ..defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT, DEFAULT_WORKER_TTL
 from ..exceptions import InvalidJobOperation, ShutDownImminentException
 from ..job import Job, JobStatus
-from ..timeouts import HorseMonitorTimeoutException
+from ..timeouts import BaseTimeoutException, HorseMonitorTimeoutException
 from ..utils import now
 from .base import SHUTDOWN_SIGNAL, BaseWorker, WorkerStatus, signal_name
 
@@ -159,7 +159,7 @@ class Worker(BaseWorker):
         self.log.warning('Worker %s: job %s stopped by user, moving job to FailedJobRegistry', self.name, job.id)
         try:
             execute_stopped_callback(job, self.death_penalty_class)
-        except Exception:
+        except (Exception, BaseTimeoutException):
             self.log.exception('Worker %s: stopped callback for job %s raised', self.name, job.id)
         self.handle_job_failure(
             job, queue=queue, exc_string='Job stopped by user, work-horse terminated.', execution=execution

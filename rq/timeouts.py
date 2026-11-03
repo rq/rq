@@ -3,8 +3,8 @@ import signal
 import threading
 
 
-class BaseTimeoutException(Exception):
-    """Base exception for timeouts."""
+class BaseTimeoutException(BaseException):
+    """Base exception for RQ control-flow timeouts, outside application error handlers."""
 
     pass
 
