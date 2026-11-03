@@ -174,6 +174,25 @@ class TestRQCli(CLITestCase):
         self.assertNotIn(job2, registry)
         self.assertNotIn(job3, registry)
 
+    def test_requeue_skips_jobs_not_in_failed_registry(self):
+        """rq requeue counts ids it can't requeue instead of crashing"""
+        connection = Redis.from_url(self.redis_url)
+        queue = Queue('requeue', connection=connection)
+        registry = queue.failed_job_registry
+
+        job = queue.enqueue(div_by_zero)
+        Worker([queue], connection=connection).work(burst=True)
+        self.assertIn(job, registry)
+        not_failed = queue.enqueue(say_hello)
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main, ['requeue', '-u', self.redis_url, '--queue', 'requeue', not_failed.id, 'no-such-job', job.id]
+        )
+        self.assert_normal_execution(result)
+        self.assertIn('Unable to requeue 2 jobs', result.output)
+        self.assertNotIn(job, registry)
+
     def test_requeue_with_serializer(self):
         """rq requeue -u <url> -S <serializer> --all"""
         connection = Redis.from_url(self.redis_url)
