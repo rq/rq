@@ -1,16 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import importlib
 import json
 import logging
 import re
 import warnings
 import zlib
-
-try:
-    from compression import zstd
-except ImportError:
-    zstd = None
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from contextvars import ContextVar
 from datetime import datetime, timedelta
@@ -19,6 +15,11 @@ from typing import TYPE_CHECKING, Any, cast
 from uuid import uuid4
 
 from redis import WatchError
+
+try:
+    zstd: Any = importlib.import_module('compression.zstd')
+except ImportError:
+    zstd = None
 
 from .defaults import CALLBACK_TIMEOUT, RQ_KEY_PREFIX, UNSERIALIZABLE_RETURN_VALUE_PAYLOAD
 from .types import FailureCallbackType, SuccessCallbackType
