@@ -1,3 +1,4 @@
+
 import asyncio
 import json
 import queue
@@ -6,6 +7,11 @@ import zlib
 from datetime import datetime, timezone
 from pickle import dumps, loads
 from uuid import uuid4
+
+try:
+    from compression import zstd
+except ImportError:
+    zstd = None
 
 from rq.defaults import CALLBACK_TIMEOUT
 from rq.exceptions import DeserializationError, InvalidJobOperation, NoSuchJobError
@@ -176,7 +182,12 @@ class TestJob(RQTestCase):
         self.assertEqual(self.connection.type(job.key), b'hash')
 
         # Saving writes pickled job data
-        unpickled_data = loads(zlib.decompress(self.connection.hget(job.key, 'data')))
+        stored_data = self.connection.hget(job.key, 'data')
+        if zstd is not None:
+             unpickled_data = loads(zstd.decompress(stored_data))
+        else:
+                unpickled_data = loads(zlib.decompress(stored_data))
+
         self.assertEqual(unpickled_data[0], 'tests.fixtures.some_calculation')
 
     def test_fetch(self):
@@ -398,7 +409,14 @@ class TestJob(RQTestCase):
 
         # exc_info is stored in compressed format
         exc_info = self.connection.hget(job.key, 'exc_info')
-        self.assertEqual(as_text(zlib.decompress(exc_info)), exception_string)
+        if zstd is not None:
+                self.assertEqual(zstd.decompress(exc_info).decode(), exception_string)
+        else:
+                self.assertEqual(as_text(zlib.decompress(exc_info)), exception_string)
+
+
+
+
 
         job.refresh()
         self.assertEqual(job.exc_info, exception_string)
@@ -409,6 +427,14 @@ class TestJob(RQTestCase):
         job.refresh()
         self.assertEqual(job.exc_info, exception_string)
 
+        # Legacy Zlib-compressed exception info is also supported.
+        legacy_exc_info = zlib.compress(exception_string.encode('utf-8'))
+        self.connection.hset(job.key, 'exc_info', legacy_exc_info)
+        job.refresh()
+        self.assertEqual(job.exc_info, exception_string)
+
+
+
     def test_compressed_job_data_handling(self):
         """Jobs handle both compressed and uncompressed data"""
 
@@ -417,11 +443,21 @@ class TestJob(RQTestCase):
 
         # Job data is stored in compressed format
         job_data = job.data
-        self.assertEqual(zlib.compress(job_data), self.connection.hget(job.key, 'data'))
+        if zstd is not None:
+                self.assertEqual(zstd.decompress(self.connection.hget(job.key, 'data')), job_data)
+        else:
+                self.assertEqual(zlib.compress(job_data), self.connection.hget(job.key, 'data'))
 
         self.connection.hset(job.key, 'data', job_data)
         job.refresh()
         self.assertEqual(job.data, job_data)
+        # Legacy Zlib-compressed data is also supported.
+        legacy_data = zlib.compress(job_data)
+        self.connection.hset(job.key, 'data', legacy_data)
+
+        job.refresh()
+        self.assertEqual(job.data, job_data)
+
 
     def test_custom_meta_is_persisted(self):
         """Additional meta data on jobs are stored persisted correctly."""

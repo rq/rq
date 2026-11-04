@@ -6,6 +6,11 @@ import logging
 import re
 import warnings
 import zlib
+
+try:
+    from compression import zstd
+except ImportError:
+    zstd = None
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from contextvars import ContextVar
 from datetime import datetime, timedelta
@@ -49,6 +54,29 @@ from .utils import (
     utcformat,
 )
 from .webhook import Webhook
+
+
+def _compress(data: bytes) -> bytes:
+    """Compress data using Zstandard when available, otherwise Zlib."""
+    if zstd is not None:
+        return zstd.compress(data)
+
+    return zlib.compress(data)
+
+
+def _decompress(data: bytes) -> bytes:
+    """Decompress Zstandard, Zlib, or legacy uncompressed data."""
+    if zstd is not None:
+        try:
+            return zstd.decompress(data)
+        except zstd.ZstdError:
+            pass
+
+    try:
+        return zlib.decompress(data)
+    except zlib.error:
+        # Support legacy uncompressed data.
+        return data
 
 logger = logging.getLogger('rq.job')
 
@@ -976,12 +1004,7 @@ class Job:
             raw_data = obj['data']
         except KeyError:
             raise NoSuchJobError(f'Unexpected job format: {obj}')
-
-        try:
-            self.data = zlib.decompress(raw_data)
-        except zlib.error:
-            # Fallback to uncompressed string
-            self.data = raw_data
+        self.data = _decompress(raw_data)
 
         self.created_at = str_to_date(v) if (v := obj.get('created_at')) else now()
         self.origin = as_text(obj['origin']) if obj.get('origin') else ''
@@ -1066,11 +1089,8 @@ class Job:
 
         raw_exc_info = obj.get('exc_info')
         if raw_exc_info:
-            try:
-                self._exc_info = as_text(zlib.decompress(raw_exc_info))
-            except zlib.error:
-                # Fallback to uncompressed string
-                self._exc_info = as_text(raw_exc_info)
+            self._exc_info = as_text(_decompress(raw_exc_info))
+
 
     # Persistence
     def refresh(self):  # noqa
@@ -1099,7 +1119,7 @@ class Job:
         """
         obj: dict[str, Any] = {
             'created_at': utcformat(self.created_at or now()),
-            'data': zlib.compress(self.data),
+           'data': _compress(self.data),
             'success_callback_name': self._success_callback_name if self._success_callback_name else '',
             'failure_callback_name': self._failure_callback_name if self._failure_callback_name else '',
             'stopped_callback_name': self._stopped_callback_name if self._stopped_callback_name else '',
@@ -1142,7 +1162,7 @@ class Job:
             except:  # noqa
                 obj['result'] = 'Unserializable return value'
         if self._exc_info is not None and include_result:
-            obj['exc_info'] = zlib.compress(str(self._exc_info).encode('utf-8'))
+            obj['exc_info'] = _compress(str(self._exc_info).encode('utf-8'))
         if self.timeout is not None:
             obj['timeout'] = self.timeout
         if self._success_callback_timeout is not None:
