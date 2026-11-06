@@ -246,9 +246,16 @@ class RQScheduler:
 
         The due job ids are read before the jobs are enqueued, so a job can be canceled,
         deleted or rescheduled in between. The move therefore runs in a transaction that
-        watches the registry and the job keys, and only enqueues jobs that are still due
-        in `registry` once the keys are watched. If the registry or a job changes before
-        the transaction commits, the due jobs are read again.
+        watches the job keys (not the registry) and only enqueues jobs that are still due
+        in `registry` once those keys are watched.
+
+        Watching the registry itself would abort the transaction on every concurrent
+        ``enqueue_in`` / ``schedule_job`` for the same queue, stalling the scheduler under
+        modest write pressure. Job-key watches still catch cancel, delete, reschedule and
+        ``save_meta`` (they all write the job hash). Registry-only removal — the first step
+        of ``Job.delete()`` — is caught by re-checking each id's score after the jobs are
+        fetched. If a watched job changes before the transaction commits, the due jobs are
+        read again.
         """
         queue = Queue(registry.name, connection=self.connection, serializer=self.serializer)
 
@@ -260,7 +267,9 @@ class RQScheduler:
                     return
 
                 try:
-                    pipeline.watch(registry.key, *[Job.key_for(job_id) for job_id in job_ids])
+                    # Watch job keys only. Concurrent schedule writes touch the registry
+                    # ZSET, not these keys, so they do not stall the scheduler.
+                    pipeline.watch(*[Job.key_for(job_id) for job_id in job_ids])
                     due_jobs, missing_job_ids = self._fetch_due_jobs(registry, job_ids, timestamp)
 
                     pipeline.multi()
@@ -287,18 +296,24 @@ class RQScheduler:
     ) -> tuple[list[Job], list[str]]:
         """Fetch the jobs among `job_ids` that are still due in `registry`.
 
-        Must be called after the registry and job keys are watched, so that anything read
-        here that changes before the transaction commits aborts it.
+        Must be called after the job keys are watched. Jobs are fetched first so that a
+        concurrent cancel/delete/reschedule/save_meta (which writes a watched job hash)
+        aborts the surrounding transaction; scores are then re-read so a registry-only
+        removal — ``Job.delete()`` removes the id from the registry before it deletes the
+        hash — is skipped even though it does not touch a watched key.
 
         Returns:
             The jobs to enqueue, and the ids still in `registry` whose job no longer exists.
         """
+        # Fetch under WATCH first so job-hash writes abort the transaction on EXEC.
+        jobs = Job.fetch_many(job_ids, connection=self.connection, serializer=self.serializer)
+
+        # Re-check scores after the fetch so registry-only removals during fetch_many
+        # (or after get_jobs_to_schedule, before WATCH) are observed.
         with self.connection.pipeline(transaction=False) as pipeline:
             for job_id in job_ids:
                 pipeline.zscore(registry.key, job_id)
             scores = pipeline.execute()
-
-        jobs = Job.fetch_many(job_ids, connection=self.connection, serializer=self.serializer)
 
         due_jobs: list[Job] = []
         missing_job_ids: list[str] = []

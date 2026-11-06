@@ -538,6 +538,64 @@ class TestScheduler(RQTestCase):
         self.assertEqual(Job.fetch(job.id, connection=self.connection).meta, {'progress': 1})
         self.assertEqual(len(ScheduledJobRegistry(queue=queue)), 0)
 
+    def _enqueue_scheduled_jobs_racing_after_list(self, scheduler, action):
+        """Run `scheduler.enqueue_scheduled_jobs()`, calling `action` once right after
+        `get_jobs_to_schedule()` returns and before the job keys are watched.
+
+        Unlike `_enqueue_scheduled_jobs_racing`, this hits the score re-check in
+        `_fetch_due_jobs` without relying on WatchError (the concurrent change happens
+        before WATCH).
+        """
+        original = ScheduledJobRegistry.get_jobs_to_schedule
+        calls = []
+
+        def get_jobs_then_act(registry, *args, **kwargs):
+            job_ids = original(registry, *args, **kwargs)
+            if job_ids and not calls:
+                calls.append(True)
+                action()
+            return job_ids
+
+        with mock.patch.object(ScheduledJobRegistry, 'get_jobs_to_schedule', get_jobs_then_act):
+            scheduler.enqueue_scheduled_jobs()
+        self.assertEqual(len(calls), 1)
+
+    def test_enqueue_scheduled_jobs_job_canceled_after_listing(self):
+        """A job canceled after due ids are listed but before WATCH is not enqueued.
+
+        The score re-check in `_fetch_due_jobs` must catch this; WatchError cannot, because
+        the cancel finishes before the job keys are watched.
+        """
+        queue, job, scheduler = self._schedule_due_job()
+
+        self._enqueue_scheduled_jobs_racing_after_list(
+            scheduler, lambda: Job.fetch(job.id, connection=self.connection).cancel()
+        )
+
+        self.assertEqual(job.get_status(), JobStatus.CANCELED)
+        self.assertEqual(queue.job_ids, [])
+        self.assertIn(job.id, CanceledJobRegistry(queue=queue))
+        self.assertEqual(len(ScheduledJobRegistry(queue=queue)), 0)
+
+    def test_enqueue_scheduled_jobs_job_rescheduled_after_listing(self):
+        """A job rescheduled after due ids are listed but before WATCH keeps its new time.
+
+        Covers the score > timestamp branch of the re-check, which existing tests miss
+        because they act after WATCH and get WatchError first.
+        """
+        queue, job, scheduler = self._schedule_due_job()
+        registry = ScheduledJobRegistry(queue=queue)
+        later = datetime(2100, 1, 1, tzinfo=timezone.utc)
+
+        self._enqueue_scheduled_jobs_racing_after_list(
+            scheduler, lambda: queue.schedule_job(Job.fetch(job.id, connection=self.connection), later)
+        )
+
+        self.assertEqual(queue.job_ids, [])
+        self.assertEqual(job.get_status(), JobStatus.SCHEDULED)
+        self.assertEqual(registry.get_job_ids(), [job.id])
+        self.assertEqual(registry.get_scheduled_time(job), later)
+
     def test_prepare_registries(self):
         """prepare_registries() creates self._scheduled_job_registries"""
         foo_queue = Queue('foo', connection=self.connection)
