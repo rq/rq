@@ -56,6 +56,8 @@ from .utils import (
 )
 from .webhook import Webhook
 
+ZSTD_MAGIC = b'\x28\xb5\x2f\xfd'
+
 
 def _compress(data: bytes, use_zstd: bool = False) -> bytes:
     """Compress data using Zlib by default or Zstandard when enabled."""
@@ -71,6 +73,10 @@ def _compress(data: bytes, use_zstd: bool = False) -> bytes:
 
 def _decompress(data: bytes) -> bytes:
     """Decompress Zstandard, Zlib, or legacy uncompressed data."""
+    if data.startswith(ZSTD_MAGIC) and zstd is None:
+        raise RuntimeError(
+            'Cannot decompress Zstandard data without Zstandard support.'
+        )
     if zstd is not None:
         try:
             return zstd.decompress(data)
@@ -214,6 +220,7 @@ class Job:
         id: str | None = None,
         connection: Redis | None = None,
         serializer=None,
+        *,
         use_zstd: bool = False,
     ):
         # Manually check for the presence of the connection argument to preserve
@@ -350,6 +357,8 @@ class Job:
             webhooks (Optional[Sequence[Webhook]], optional): Webhooks to send when the job reaches a matching
                 terminal state (`finished` or `failed`). Defaults to None.
             group_id (Optional[str], optional): A group ID that the job is being added to. Defaults to None.
+            use_zstd (bool, optional): Whether to use Zstandard compression for this job.
+                Defaults to False.
 
         Raises:
             TypeError: If `args` is not a tuple/list
@@ -1022,6 +1031,7 @@ class Job:
             raw_data = obj['data']
         except KeyError:
             raise NoSuchJobError(f'Unexpected job format: {obj}')
+        self.use_zstd = raw_data.startswith(ZSTD_MAGIC)
         self.data = _decompress(raw_data)
 
         self.created_at = str_to_date(v) if (v := obj.get('created_at')) else now()

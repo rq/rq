@@ -1,4 +1,3 @@
-
 import asyncio
 import json
 import queue
@@ -6,6 +5,7 @@ import time
 import zlib
 from datetime import datetime, timezone
 from pickle import dumps, loads
+from unittest.mock import patch
 from uuid import uuid4
 
 try:
@@ -16,7 +16,15 @@ except ImportError:
 from rq.defaults import CALLBACK_TIMEOUT
 from rq.exceptions import DeserializationError, InvalidJobOperation, NoSuchJobError
 from rq.executions import Execution
-from rq.job import Callback, Job, JobStatus, cancel_job, get_current_job
+from rq.job import (
+    ZSTD_MAGIC,
+    Callback,
+    Job,
+    JobStatus,
+    _decompress,
+    cancel_job,
+    get_current_job,
+)
 from rq.queue import Queue
 from rq.registry import (
     CanceledJobRegistry,
@@ -471,6 +479,36 @@ class TestJob(RQTestCase):
             zstd.decompress(compressed_exc_info).decode('utf-8'),
             exception_string,
         )
+
+    def test_zstd_data_requires_zstd_support(self):
+        """Zstandard data cannot be decoded without Zstandard support."""
+        zstd_data = ZSTD_MAGIC + b'test payload'
+
+        with patch('rq.job.zstd', None):
+            with self.assertRaisesRegex(RuntimeError, 'Zstandard data'):
+                _decompress(zstd_data)
+
+    def test_zstd_compression_mode_preserved_after_refresh(self):
+        """Restored jobs retain their original compression mode."""
+        if zstd is None:
+            self.skipTest('Zstandard is not available')
+
+        job = Job.create(
+            func=fixtures.say_hello,
+            args=('Lionel',),
+            connection=self.connection,
+            use_zstd=True,
+        )
+        job.save()
+
+        job.refresh()
+
+        self.assertTrue(job.use_zstd)
+
+        job.save()
+
+        compressed_data = self.connection.hget(job.key, 'data')
+        self.assertEqual(zstd.decompress(compressed_data), job.data)
 
     def test_custom_meta_is_persisted(self):
         """Additional meta data on jobs are stored persisted correctly."""
