@@ -31,7 +31,10 @@ class Group:
 
     def _add_jobs(self, jobs: Iterable[Job], pipeline: Pipeline):
         """Add jobs to the group"""
-        pipeline.sadd(self.key, *[job.id for job in jobs])
+        job_ids = [job.id for job in jobs]
+        if not job_ids:
+            return
+        pipeline.sadd(self.key, *job_ids)
         pipeline.sadd(self.REDIS_GROUP_KEY, self.name)
         pipeline.execute()
 
