@@ -1,4 +1,5 @@
 import time
+import unittest
 from unittest.mock import patch
 
 from rq import Queue, SimpleWorker
@@ -68,3 +69,17 @@ class TestTimeouts(RQTestCase):
         delattr(mock_signal, 'SIGALRM')
         self.assertFalse(hasattr(mock_signal, 'SIGALRM'))
         self.assertEqual(get_default_death_penalty_class(), TimerDeathPenalty)
+
+
+class TestTimerDeathPenaltyIsolatesException(unittest.TestCase):
+    def test_does_not_replace_job_timeout_exception_init(self):
+        from rq.timeouts import JobTimeoutException, TimerDeathPenalty
+
+        first = TimerDeathPenalty(5)
+        second = TimerDeathPenalty(9)
+        with self.assertRaises(JobTimeoutException) as caught:
+            raise JobTimeoutException('kept')
+        self.assertEqual(str(caught.exception), 'kept')
+        self.assertIn('5 seconds', str(first._exception()))
+        self.assertIn('9 seconds', str(second._exception()))
+        self.assertIsInstance(first._exception(), JobTimeoutException)
