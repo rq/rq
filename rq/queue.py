@@ -16,6 +16,7 @@ from typing import (
 )
 
 from redis import WatchError
+from redis.exceptions import LockError
 
 from .timeouts import BaseDeathPenalty, UnixSignalDeathPenalty
 
@@ -212,6 +213,7 @@ class Queue:
         prefix = self.redis_queue_namespace_prefix
         self.name = name
         self._key = f'{prefix}{name}'
+        self._maintenance_lock = self.connection.lock(self.registry_cleaning_key, timeout=899)
         self._default_timeout = parse_timeout(default_timeout) or self.DEFAULT_TIMEOUT
         self._is_async = is_async
         self.log = logger
@@ -287,14 +289,15 @@ class Queue:
         Returns:
             lock_acquired (bool)
         """
-        lock_acquired = self.connection.set(self.registry_cleaning_key, 1, nx=True, ex=899)
-        if not lock_acquired:
-            return False
-        return lock_acquired
+        return self._maintenance_lock.acquire(blocking=False)
 
     def release_maintenance_lock(self):
-        """Deletes the maintenance lock after registries have been cleaned"""
-        self.connection.delete(self.registry_cleaning_key)
+        """Release this queue instance's maintenance lock if it is still owned."""
+        try:
+            self._maintenance_lock.release()
+        except LockError:
+            # An expired lease may already belong to another worker.
+            pass
 
     def empty(self):
         """Removes all messages on the queue.
