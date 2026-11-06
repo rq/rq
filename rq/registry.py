@@ -666,7 +666,7 @@ class ScheduledJobRegistry(BaseRegistry):
         return connection.zremrangebyscore(self.key, 0, score)
 
     def get_jobs_to_schedule(self, timestamp: int | None = None, chunk_size: int = 1000) -> list[str]:
-        """Get's a list of job IDs that should be scheduled.
+        """Gets a list of job IDs that should be scheduled.
 
         Args:
             timestamp (Optional[int]): _description_. Defaults to None.

@@ -79,7 +79,7 @@ class TestJobDependency(RQTestCase):
 
     def test_job_with_dependents_delete_parent(self):
         """job.delete() deletes itself from Redis but not dependents.
-        Wthout a save, the dependent job is never saved into redis. The delete
+        Without a save, the dependent job is never saved into redis. The delete
         method will get and pass a NoSuchJobError.
         """
         queue = Queue(connection=self.connection, serializer=JSONSerializer)
@@ -139,7 +139,7 @@ class TestJobDependency(RQTestCase):
 
     def test_job_with_dependents_delete_all_with_saved(self):
         """job.delete() deletes itself from Redis. Dependents need to be
-        deleted explictely. Without a save, the dependent job is never saved
+        deleted explicitly. Without a save, the dependent job is never saved
         into redis. The delete method will get and pass a NoSuchJobError.
         """
         queue = Queue(connection=self.connection, serializer=JSONSerializer)
