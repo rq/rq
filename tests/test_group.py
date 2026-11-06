@@ -25,6 +25,15 @@ class TestGroup(RQTestCase):
         assert len(group.get_jobs()) == 2
         q.empty()
 
+    def test_enqueue_many_empty_batch(self):
+        q = Queue(connection=self.connection)
+        group = Group.create(connection=self.connection)
+
+        assert group.enqueue_many(q, []) == []
+        assert q.count == 0
+        assert not self.connection.exists(group.key)
+        assert not self.connection.sismember(Group.REDIS_GROUP_KEY, group.name)
+
     def test_group_cleanup_with_no_jobs(self):
         q = Queue(connection=self.connection)
         group = Group.create(connection=self.connection)
