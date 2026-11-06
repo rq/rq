@@ -81,6 +81,18 @@ class TestRegistry(RQTestCase):
         self.assertGreaterEqual(time, expected_time - timedelta(seconds=2))
         self.assertLessEqual(time, expected_time + timedelta(seconds=2))
 
+    def test_get_expiration_time_without_ttl(self):
+        """registry.get_expiration_time() returns None for jobs that never expire"""
+        queue = Queue(connection=self.connection)
+        job = queue.enqueue(say_hello)
+
+        self.registry.add(job, -1)
+        self.assertIsNone(self.registry.get_expiration_time(job))
+
+        failed_job_registry = FailedJobRegistry(connection=self.connection)
+        failed_job_registry.add(job, ttl=-1)
+        self.assertIsNone(failed_job_registry.get_expiration_time(job))
+
     def test_add_and_remove(self):
         """Adding and removing job from BaseRegistry."""
         timestamp = current_timestamp()
