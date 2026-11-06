@@ -15,6 +15,7 @@ from uuid import uuid4
 
 from redis import ConnectionPool, Redis
 from redis.client import Pipeline
+from redis.exceptions import WatchError
 
 from .connections import parse_connection
 from .defaults import (
@@ -243,47 +244,96 @@ class RQScheduler:
             self.prepare_registries()
 
         for registry in self._scheduled_job_registries:
-            timestamp = current_timestamp()
+            self._enqueue_due_jobs(registry)
+        self._status = self.Status.STARTED
 
-            # TODO: try to use Lua script to make get_jobs_to_schedule()
-            # and remove_jobs() atomic
-            job_ids = registry.get_jobs_to_schedule(timestamp)
+    def _enqueue_due_jobs(self, registry: ScheduledJobRegistry) -> None:
+        """Move the jobs in `registry` that are due onto their queue.
 
-            if not job_ids:
-                continue
+        The due job ids are read before the jobs are enqueued, so a job can be canceled,
+        deleted or rescheduled in between. The move therefore runs in a transaction that
+        watches the job keys (not the registry) and only enqueues jobs that are still due
+        in `registry` once those keys are watched.
 
-            queue = self.queue_class(
-                registry.name, connection=self.connection, job_class=self.job_class, serializer=self.serializer
-            )
+        Watching the registry itself would abort the transaction on every concurrent
+        ``enqueue_in`` / ``schedule_job`` for the same queue, stalling the scheduler under
+        modest write pressure. Job-key watches still catch cancel, delete, reschedule and
+        ``save_meta`` (they all write the job hash). Registry-only removal — the first step
+        of ``Job.delete()`` — is caught by re-checking each id's score after the jobs are
+        fetched. If a watched job changes before the transaction commits, the due jobs are
+        read again.
+        """
+        queue = self.queue_class(
+            registry.name, connection=self.connection, job_class=self.job_class, serializer=self.serializer
+        )
 
-            jobs = self.job_class.fetch_many(job_ids, connection=self.connection, serializer=self.serializer)
-            normal_jobs = []
-            jobs_with_rate_limit = []
-            missing_job_ids = []
+        with self.connection.pipeline() as pipeline:
+            while True:
+                timestamp = current_timestamp()
+                job_ids = registry.get_jobs_to_schedule(timestamp)
+                if not job_ids:
+                    return
 
-            for job_id, job in zip(job_ids, jobs):
-                if job is None:
-                    missing_job_ids.append(job_id)
-                elif job.has_rate_limit:
-                    jobs_with_rate_limit.append(job)
-                else:
-                    normal_jobs.append(job)
+                try:
+                    # Watch job keys only. Concurrent schedule writes touch the registry
+                    # ZSET, not these keys, so they do not stall the scheduler.
+                    pipeline.watch(*[self.job_class.key_for(job_id) for job_id in job_ids])
+                    due_jobs, missing_job_ids = self._fetch_due_jobs(registry, job_ids, timestamp)
 
-            if normal_jobs or missing_job_ids:
-                with self.connection.pipeline() as pipeline:
-                    for job in normal_jobs:
-                        queue._enqueue_job(job, pipeline=pipeline, at_front=job.should_enqueue_at_front())
-                        registry.remove(job.id, pipeline=pipeline)
+                    pipeline.multi()
+                    for job in due_jobs:
+                        if not job.has_rate_limit:
+                            queue._enqueue_job(job, pipeline=pipeline, at_front=job.should_enqueue_at_front())
+                            registry.remove(job.id, pipeline=pipeline)
+                    for job in due_jobs:
+                        if job.has_rate_limit:
+                            registry.remove(job.id, pipeline=pipeline)
+                            queue._enqueue_rate_limited_job(
+                                job, pipeline=pipeline, at_front=job.should_enqueue_at_front()
+                            )
                     for job_id in missing_job_ids:
                         registry.remove(job_id, pipeline=pipeline)
                     pipeline.execute()
+                    return
+                except WatchError:
+                    self.log.debug('Scheduled jobs in %s changed while being enqueued, retrying', registry.name)
+                    continue
 
-            for job in jobs_with_rate_limit:
-                with self.connection.pipeline() as pipeline:
-                    registry.remove(job.id, pipeline=pipeline)
-                    queue._enqueue_rate_limited_job(job, pipeline=pipeline, at_front=job.should_enqueue_at_front())
-                    pipeline.execute()
-        self._status = self.Status.STARTED
+    def _fetch_due_jobs(
+        self, registry: ScheduledJobRegistry, job_ids: list[str], timestamp: int
+    ) -> tuple[list[Job], list[str]]:
+        """Fetch the jobs among `job_ids` that are still due in `registry`.
+
+        Must be called after the job keys are watched. Jobs are fetched first so that a
+        concurrent cancel/delete/reschedule/save_meta (which writes a watched job hash)
+        aborts the surrounding transaction; scores are then re-read so a registry-only
+        removal — ``Job.delete()`` removes the id from the registry before it deletes the
+        hash — is skipped even though it does not touch a watched key.
+
+        Returns:
+            The jobs to enqueue, and the ids still in `registry` whose job no longer exists.
+        """
+        # Fetch under WATCH first so job-hash writes abort the transaction on EXEC.
+        jobs = self.job_class.fetch_many(job_ids, connection=self.connection, serializer=self.serializer)
+
+        # Re-check scores after the fetch so registry-only removals during fetch_many
+        # (or after get_jobs_to_schedule, before WATCH) are observed.
+        with self.connection.pipeline(transaction=False) as pipeline:
+            for job_id in job_ids:
+                pipeline.zscore(registry.key, job_id)
+            scores = pipeline.execute()
+
+        due_jobs: list[Job] = []
+        missing_job_ids: list[str] = []
+        for job_id, score, job in zip(job_ids, scores, jobs):
+            # Canceled, deleted or rescheduled since the due ids were read
+            if score is None or score > timestamp:
+                continue
+            if job is None:
+                missing_job_ids.append(job_id)
+            else:
+                due_jobs.append(job)
+        return due_jobs, missing_job_ids
 
     def _install_signal_handlers(self):
         """Installs signal handlers for handling SIGINT and SIGTERM
