@@ -479,6 +479,30 @@ class TestJob(RQTestCase):
             zstd.decompress(compressed_exc_info).decode('utf-8'),
             exception_string,
         )
+    def test_zstd_compression_with_custom_job_class(self):
+        """Custom Job classes support opt-in Zstandard compression."""
+
+        if zstd is None:
+            self.skipTest('Zstandard is not available')
+
+        class CustomJob(Job):
+            def __init__(self, id=None, connection=None, serializer=None):
+                super().__init__(id, connection, serializer)
+
+        job = CustomJob.create(
+            func=fixtures.say_hello,
+            args=('Lionel',),
+            connection=self.connection,
+            use_zstd=True,
+        )
+
+        self.assertIsInstance(job, CustomJob)
+        self.assertTrue(job.use_zstd)
+
+        job.save()
+
+        compressed_data = self.connection.hget(job.key, 'data')
+        self.assertEqual(zstd.decompress(compressed_data), job.data)
 
     def test_zstd_data_requires_zstd_support(self):
         """Zstandard data cannot be decoded without Zstandard support."""

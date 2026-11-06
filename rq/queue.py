@@ -206,6 +206,8 @@ class Queue:
             serializer (Optional[Union[Serializer, str]], optional): Serializer. Defaults to None.
             death_penalty_class (Type[BaseDeathPenalty, optional): Job class or a string referencing the Job class path.
                 Defaults to UnixSignalDeathPenalty.
+            use_zstd (bool, optional): Whether to use Zstandard compression for jobs.
+                Defaults to False.
         """
         if not connection:
             raise TypeError("Queue() missing 1 required positional argument: 'connection'")

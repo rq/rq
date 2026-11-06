@@ -380,8 +380,8 @@ class Job:
         job = cls(
             connection=connection,
             serializer=serializer,
-            use_zstd=use_zstd,
         )
+        job.use_zstd = use_zstd
 
         if id is not None:
             job.id = id
