@@ -276,6 +276,7 @@ def normalize_config_path(config_path: str) -> str:
 
     Examples:
         normalize_config_path('app/cron_config.py') -> 'app.cron_config'
+        normalize_config_path('./app/cron_config.py') -> 'app.cron_config'
         normalize_config_path('app/cron_config') -> 'app.cron_config'
         normalize_config_path('app.cron_config') -> 'app.cron_config'
         normalize_config_path('/abs/path/to/config.py') -> 'abs.path.to.config'
@@ -287,8 +288,9 @@ def normalize_config_path(config_path: str) -> str:
         # Already a dotted module path, return as-is
         return config_path
 
-    # Convert file path to dotted module path
-    normalized = config_path
+    # Convert file path to dotted module path. normpath() drops '.' segments such
+    # as a leading './', which would otherwise turn into a relative import.
+    normalized = os.path.normpath(config_path)
 
     # Remove .py extension if present
     if normalized.endswith('.py'):
