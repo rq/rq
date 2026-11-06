@@ -183,10 +183,7 @@ class TestJob(RQTestCase):
 
         # Saving writes pickled job data
         stored_data = self.connection.hget(job.key, 'data')
-        if zstd is not None:
-             unpickled_data = loads(zstd.decompress(stored_data))
-        else:
-                unpickled_data = loads(zlib.decompress(stored_data))
+        unpickled_data = loads(zlib.decompress(stored_data))
 
         self.assertEqual(unpickled_data[0], 'tests.fixtures.some_calculation')
 
@@ -409,15 +406,10 @@ class TestJob(RQTestCase):
 
         # exc_info is stored in compressed format
         exc_info = self.connection.hget(job.key, 'exc_info')
-        if zstd is not None:
-                self.assertEqual(zstd.decompress(exc_info).decode(), exception_string)
-        else:
-                self.assertEqual(as_text(zlib.decompress(exc_info)), exception_string)
-
-
-
-
-
+        self.assertEqual(
+            as_text(zlib.decompress(exc_info)),
+            exception_string,
+        )
         job.refresh()
         self.assertEqual(job.exc_info, exception_string)
 
@@ -433,8 +425,6 @@ class TestJob(RQTestCase):
         job.refresh()
         self.assertEqual(job.exc_info, exception_string)
 
-
-
     def test_compressed_job_data_handling(self):
         """Jobs handle both compressed and uncompressed data"""
 
@@ -443,11 +433,10 @@ class TestJob(RQTestCase):
 
         # Job data is stored in compressed format
         job_data = job.data
-        if zstd is not None:
-                self.assertEqual(zstd.decompress(self.connection.hget(job.key, 'data')), job_data)
-        else:
-                self.assertEqual(zlib.compress(job_data), self.connection.hget(job.key, 'data'))
-
+        self.assertEqual(
+            zlib.decompress(self.connection.hget(job.key, 'data')),
+            job_data,
+        )
         self.connection.hset(job.key, 'data', job_data)
         job.refresh()
         self.assertEqual(job.data, job_data)
@@ -458,6 +447,30 @@ class TestJob(RQTestCase):
         job.refresh()
         self.assertEqual(job.data, job_data)
 
+    def test_zstd_compression_opt_in(self):
+        """Jobs use Zstandard compression when explicitly enabled."""
+        if zstd is None:
+            self.skipTest('Zstandard is not available')
+
+        exception_string = 'Test exception information'
+
+        job = Job.create(
+            func=fixtures.say_hello,
+            args=('Lionel',),
+            connection=self.connection,
+            use_zstd=True,
+        )
+        job._exc_info = exception_string
+        job.save()
+
+        compressed_data = self.connection.hget(job.key, 'data')
+        self.assertEqual(zstd.decompress(compressed_data), job.data)
+
+        compressed_exc_info = self.connection.hget(job.key, 'exc_info')
+        self.assertEqual(
+            zstd.decompress(compressed_exc_info).decode('utf-8'),
+            exception_string,
+        )
 
     def test_custom_meta_is_persisted(self):
         """Additional meta data on jobs are stored persisted correctly."""

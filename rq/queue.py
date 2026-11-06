@@ -190,6 +190,7 @@ class Queue:
         job_class: str | type[Job] | None = None,
         serializer: Serializer | str | None = None,
         death_penalty_class: type[BaseDeathPenalty] | None = UnixSignalDeathPenalty,
+        use_zstd: bool = False,
         **kwargs,
     ):
         """Initializes a Queue object.
@@ -229,6 +230,7 @@ class Queue:
         self.death_penalty_class = death_penalty_class  # type: ignore[assignment]
 
         self.serializer = resolve_serializer(serializer)
+        self.use_zstd = use_zstd
         self.redis_server_version: tuple[int, int, int] | None = None
 
     def __len__(self):
@@ -629,6 +631,7 @@ class Queue:
 
         job = self.job_class.create(
             func,
+            use_zstd=self.use_zstd,
             args=args,
             kwargs=kwargs,
             connection=self.connection,

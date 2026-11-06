@@ -57,9 +57,13 @@ from .utils import (
 from .webhook import Webhook
 
 
-def _compress(data: bytes) -> bytes:
-    """Compress data using Zstandard when available, otherwise Zlib."""
-    if zstd is not None:
+def _compress(data: bytes, use_zstd: bool = False) -> bytes:
+    """Compress data using Zlib by default or Zstandard when enabled."""
+    if use_zstd:
+        if zstd is None:
+            raise RuntimeError(
+                'Zstandard compression requires Python 3.14 or newer.'
+            )
         return zstd.compress(data)
 
     return zlib.compress(data)
@@ -205,7 +209,13 @@ class Job:
     _dependency: Job | None
     redis_job_namespace_prefix = RQ_KEY_PREFIX + ':job:'
 
-    def __init__(self, id: str | None = None, connection: Redis | None = None, serializer=None):
+    def __init__(
+        self,
+        id: str | None = None,
+        connection: Redis | None = None,
+        serializer=None,
+        use_zstd: bool = False,
+    ):
         # Manually check for the presence of the connection argument to preserve
         # backwards compatibility during the transition to RQ v2.0.0.
         if not connection:
@@ -248,6 +258,7 @@ class Job:
         # Stored meta that could not be deserialized here, kept so a save writes it back unchanged.
         self._unreadable_meta: bytes | None = None
         self.serializer = resolve_serializer(serializer)
+        self.use_zstd = use_zstd
         # Tracks remaining retries for exception-based retry. Set to retry.max when a job
         # is enqueued with retry=Retry(...) via queue.enqueue(). Decremented each time
         # the job raises an exception and is retried via job.retry().
@@ -293,6 +304,7 @@ class Job:
         serializer=None,
         group_id: str | None = None,
         *,
+        use_zstd: bool = False,
         on_success: Callback | Callable[..., Any] | None = None,  # Callable is deprecated
         on_failure: Callback | Callable[..., Any] | None = None,  # Callable is deprecated
         on_stopped: Callback | Callable[..., Any] | None = None,  # Callable is deprecated
@@ -356,7 +368,12 @@ class Job:
         if kwargs is None:
             kwargs = {}
 
-        job = cls(connection=connection, serializer=serializer)
+        job = cls(
+            connection=connection,
+            serializer=serializer,
+            use_zstd=use_zstd,
+        )
+
         if id is not None:
             job.id = id
 
@@ -1120,7 +1137,7 @@ class Job:
         """
         obj: dict[str, Any] = {
             'created_at': utcformat(self.created_at or now()),
-           'data': _compress(self.data),
+           'data': _compress(self.data, use_zstd=self.use_zstd),
             'success_callback_name': self._success_callback_name if self._success_callback_name else '',
             'failure_callback_name': self._failure_callback_name if self._failure_callback_name else '',
             'stopped_callback_name': self._stopped_callback_name if self._stopped_callback_name else '',
@@ -1163,7 +1180,11 @@ class Job:
             except:  # noqa
                 obj['result'] = 'Unserializable return value'
         if self._exc_info is not None and include_result:
-            obj['exc_info'] = _compress(str(self._exc_info).encode('utf-8'))
+            obj['exc_info'] = _compress(
+                str(self._exc_info).encode('utf-8'),
+                use_zstd=self.use_zstd,
+            )
+
         if self.timeout is not None:
             obj['timeout'] = self.timeout
         if self._success_callback_timeout is not None:
