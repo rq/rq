@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pickle import dumps, loads
 from uuid import uuid4
 
-from rq.defaults import CALLBACK_TIMEOUT
+from rq.defaults import CALLBACK_TIMEOUT, DEFAULT_FAILURE_TTL
 from rq.exceptions import DeserializationError, InvalidJobOperation, NoSuchJobError
 from rq.executions import Execution
 from rq.job import Callback, Job, JobStatus, cancel_job, get_current_job
@@ -615,6 +615,15 @@ class TestJob(RQTestCase):
         job = Job.create(func=fixtures.say_hello, connection=self.connection)
         job.save()
         self.assertEqual(job.get_result_ttl(default_ttl=default_ttl), default_ttl)
+
+    def test_get_failure_ttl(self):
+        """Getting job failure TTL."""
+        job = Job.create(func=fixtures.say_hello, failure_ttl=1, connection=self.connection)
+        job.save()
+        self.assertEqual(job.get_failure_ttl(), 1)
+        job = Job.create(func=fixtures.say_hello, connection=self.connection)
+        job.save()
+        self.assertEqual(job.get_failure_ttl(), DEFAULT_FAILURE_TTL)
 
     def test_get_job_ttl(self):
         """Getting job TTL."""
