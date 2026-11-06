@@ -66,6 +66,8 @@ class RQScheduler:
         log_format=DEFAULT_LOGGING_FORMAT,
         serializer=None,
         name: str | None = None,
+        job_class: type[Job] | None = None,
+        queue_class: type[Queue] | None = None,
     ):
         self._queue_names = set(parse_names(queues))
         self._acquired_locks: set[str] = set()
@@ -73,6 +75,8 @@ class RQScheduler:
         self.lock_acquisition_time = None
         self._connection_class, self._pool_class, self._pool_kwargs = parse_connection(connection)
         self.serializer = resolve_serializer(serializer)
+        self.job_class = job_class if job_class else Job
+        self.queue_class = queue_class if queue_class else Queue
 
         # Identity, stable across the fork (name is pickled to the child process).
         self.name: str = name or uuid4().hex
@@ -161,7 +165,9 @@ class RQScheduler:
             queue_names = self._acquired_locks
         for name in queue_names:
             self._scheduled_job_registries.append(
-                ScheduledJobRegistry(name, connection=self.connection, serializer=self.serializer)
+                ScheduledJobRegistry(
+                    name, connection=self.connection, job_class=self.job_class, serializer=self.serializer
+                )
             )
 
     @classmethod
@@ -257,7 +263,9 @@ class RQScheduler:
         fetched. If a watched job changes before the transaction commits, the due jobs are
         read again.
         """
-        queue = Queue(registry.name, connection=self.connection, serializer=self.serializer)
+        queue = self.queue_class(
+            registry.name, connection=self.connection, job_class=self.job_class, serializer=self.serializer
+        )
 
         with self.connection.pipeline() as pipeline:
             while True:
@@ -269,7 +277,7 @@ class RQScheduler:
                 try:
                     # Watch job keys only. Concurrent schedule writes touch the registry
                     # ZSET, not these keys, so they do not stall the scheduler.
-                    pipeline.watch(*[Job.key_for(job_id) for job_id in job_ids])
+                    pipeline.watch(*[self.job_class.key_for(job_id) for job_id in job_ids])
                     due_jobs, missing_job_ids = self._fetch_due_jobs(registry, job_ids, timestamp)
 
                     pipeline.multi()
@@ -306,7 +314,7 @@ class RQScheduler:
             The jobs to enqueue, and the ids still in `registry` whose job no longer exists.
         """
         # Fetch under WATCH first so job-hash writes abort the transaction on EXEC.
-        jobs = Job.fetch_many(job_ids, connection=self.connection, serializer=self.serializer)
+        jobs = self.job_class.fetch_many(job_ids, connection=self.connection, serializer=self.serializer)
 
         # Re-check scores after the fetch so registry-only removals during fetch_many
         # (or after get_jobs_to_schedule, before WATCH) are observed.

@@ -121,7 +121,7 @@ class TestDependencies(RQTestCase):
         job = Job.fetch(job.id, connection=self.connection)
         self.assertEqual(job.get_status(), JobStatus.FINISHED)
 
-        # Test dependant is enqueued at front
+        # Test dependent is enqueued at front
         q.empty()
         parent_job = q.enqueue(say_hello)
         q.enqueue(say_hello, job_id='fake_job_id_1', depends_on=Dependency(jobs=[parent_job]))
@@ -193,7 +193,7 @@ class TestDependencies(RQTestCase):
         self.assertEqual(job.get_status(), JobStatus.FINISHED)
 
     def test_enqueue_job_dependency(self):
-        """Enqueue via Queue.enqueue_job() with depencency"""
+        """Enqueue via Queue.enqueue_job() with dependency"""
         q = Queue(connection=self.connection)
         w = SimpleWorker([q], connection=q.connection)
 

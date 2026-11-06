@@ -401,7 +401,7 @@ class Job:
         return job
 
     def get_position(self) -> int | None:
-        """Get's the job's position on the queue
+        """Gets the job's position on the queue
 
         Returns:
             position (Optional[int]): The position
@@ -448,7 +448,7 @@ class Job:
         connection.hset(self.key, 'status', self._status)
 
     def get_meta(self, refresh: bool = True) -> dict:
-        """Get's the metadata for a Job, an arbitrary dictionary.
+        """Gets the metadata for a Job, an arbitrary dictionary.
 
         Args:
             refresh (bool, optional): Whether to refresh. Defaults to True.

@@ -184,13 +184,19 @@ class BaseRegistry:
         """Returns Queue object associated with this registry."""
         return Queue(self.name, connection=self.connection, serializer=self.serializer)
 
-    def get_expiration_time(self, job: Job) -> datetime:
+    def get_expiration_time(self, job: Job) -> datetime | None:
         """Returns job's expiration time.
 
         Args:
             job (Job): The Job to get the expiration
+
+        Returns:
+            datetime (Optional[datetime]): The expiration time, or None if the job never expires
         """
         score = self.connection.zscore(self.key, job.id)
+        # A TTL of -1 is stored as +inf, or as -1 in FailedJobRegistry
+        if score is not None and (score < 0 or score == float('inf')):
+            return None
         return datetime.fromtimestamp(score, timezone.utc)  # type: ignore[arg-type]
 
     def requeue(self, job_or_id: Job | str, at_front: bool = False) -> Job:
@@ -666,7 +672,7 @@ class ScheduledJobRegistry(BaseRegistry):
         return connection.zremrangebyscore(self.key, 0, score)
 
     def get_jobs_to_schedule(self, timestamp: int | None = None, chunk_size: int = 1000) -> list[str]:
-        """Get's a list of job IDs that should be scheduled.
+        """Gets a list of job IDs that should be scheduled.
 
         Args:
             timestamp (Optional[int]): _description_. Defaults to None.
