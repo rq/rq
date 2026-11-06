@@ -207,6 +207,18 @@ class TestRegistry(RQTestCase):
         self.assertTrue(200 <= self.connection.ttl(job.execution_registry.key) <= 260)
         self.assertTrue(200 <= self.connection.ttl(execution.key) < 260)
 
+        # The hash can expire before its registry entry, which has a 60 second grace period.
+        # A heartbeat in that gap restores the complete execution metadata.
+        self.connection.delete(execution.key)
+        with self.connection.pipeline() as pipeline:
+            worker.execution.heartbeat(job.started_job_registry, 200, pipeline)
+            pipeline.execute()
+
+        fetched = Execution.fetch(id=execution.id, job_id=job.id, connection=self.connection)
+        self.assertEqual(fetched.created_at.timestamp(), execution.created_at.timestamp())
+        self.assertEqual(fetched.worker_name, worker.name)
+        self.assertTrue(0 < self.connection.ttl(execution.key) <= 200)
+
     def test_registry_cleanup(self):
         """ExecutionRegistry.cleanup() should remove expired executions."""
         job = self.queue.enqueue(say_hello)
@@ -243,6 +255,38 @@ class TestRegistry(RQTestCase):
         self.assertFalse(self.connection.exists(registry.key))
         # Deleting an execution also removes it from its worker's execution index
         self.assertEqual(self.connection.scard(worker.executions_key), 0)
+
+    def test_delete_registry_with_partial_hash(self):
+        """ExecutionRegistry.delete() removes an execution hash that has no created_at"""
+        job = self.queue.enqueue(say_hello)
+        worker = Worker([self.queue], connection=self.connection)
+        execution = worker.prepare_execution(job=job)
+        self.connection.hdel(execution.key, 'created_at')
+
+        registry = job.execution_registry
+        with self.connection.pipeline() as pipeline:
+            registry.delete(job=job, pipeline=pipeline)
+            pipeline.execute()
+
+        self.assertFalse(self.connection.exists(execution.key))
+        self.assertFalse(self.connection.exists(registry.key))
+        self.assertNotIn(job.id, job.started_job_registry.get_job_ids())
+        # worker_name is still in the hash, so the worker's execution index is cleaned too
+        self.assertEqual(self.connection.scard(worker.executions_key), 0)
+
+    def test_job_delete_with_missing_execution_hash(self):
+        """Job.delete() on a started job succeeds when an execution hash has expired"""
+        job = self.queue.enqueue(say_hello)
+        worker = Worker([self.queue], connection=self.connection)
+        execution = worker.prepare_execution(job=job)
+        worker.prepare_job_execution(job)
+        self.connection.delete(execution.key)
+
+        job.delete()
+
+        self.assertFalse(self.connection.exists(job.key))
+        self.assertFalse(self.connection.exists(job.execution_registry.key))
+        self.assertNotIn(job.id, job.started_job_registry.get_job_ids())
 
     def test_get_execution_ids(self):
         """ExecutionRegistry.get_execution_ids() should return a list of execution IDs"""
