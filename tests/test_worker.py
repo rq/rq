@@ -216,6 +216,20 @@ class TestWorker(RQTestCase):
         mock_client_list.assert_called_once()
         self.assertNotEqual(w.ip_address, 'unknown')
 
+    def test_create_worker_falls_back_to_client_list_when_client_info_cannot_be_parsed(self):
+        """Worker creation lists clients when redis-py cannot parse the CLIENT INFO reply."""
+        q = Queue('foo', connection=self.connection)
+
+        # redis-py < 6.3 raises KeyError for CLIENT INFO replies that lack some fields (e.g. Redis Enterprise)
+        with mock.patch.object(self.connection, 'client_info', side_effect=KeyError('qbuf-free')):
+            with mock.patch.object(
+                self.connection, 'client_list', wraps=self.connection.client_list
+            ) as mock_client_list:
+                w = Worker([q], connection=self.connection)
+
+        mock_client_list.assert_called_once()
+        self.assertNotEqual(w.ip_address, 'unknown')
+
     def test_create_worker_with_client_list_missing_own_connection(self):
         """Worker creation falls back to unknown IP when CLIENT LIST does not include its own name."""
         q = Queue('foo', connection=self.connection)
