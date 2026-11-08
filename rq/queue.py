@@ -8,6 +8,7 @@ from collections import defaultdict, namedtuple
 from collections.abc import Callable, Iterable, Sequence
 from datetime import datetime, timedelta
 from functools import total_ordering
+from threading import Lock
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -214,6 +215,8 @@ class Queue:
         self.name = name
         self._key = f'{prefix}{name}'
         self._maintenance_lock = self.connection.lock(self.registry_cleaning_key, timeout=899, thread_local=False)
+        self._maintenance_lock_guard = Lock()
+        self._maintenance_lock_acquired = False
         self._default_timeout = parse_timeout(default_timeout) or self.DEFAULT_TIMEOUT
         self._is_async = is_async
         self.log = logger
@@ -284,20 +287,32 @@ class Queue:
 
     def acquire_maintenance_lock(self) -> bool:
         """Returns a boolean indicating whether a lock to clean this queue
-        is acquired. A lock expires in 899 seconds (15 minutes - 1 second)
+        is acquired. A lock expires in 899 seconds (15 minutes - 1 second).
+        This instance must release its prior attempt before acquiring again.
 
         Returns:
             lock_acquired (bool)
         """
-        return self._maintenance_lock.acquire(blocking=False)
+        if not self._maintenance_lock_guard.acquire(blocking=False):
+            return False
+        try:
+            if self._maintenance_lock_acquired:
+                return False
+            self._maintenance_lock_acquired = self._maintenance_lock.acquire(blocking=False)
+            return self._maintenance_lock_acquired
+        finally:
+            self._maintenance_lock_guard.release()
 
     def release_maintenance_lock(self):
         """Release this queue instance's maintenance lock if it is still owned."""
-        try:
-            self._maintenance_lock.release()
-        except LockError:
-            # An expired lease may already belong to another worker.
-            pass
+        with self._maintenance_lock_guard:
+            try:
+                self._maintenance_lock.release()
+            except LockError:
+                # An expired lease may already belong to another worker.
+                pass
+            finally:
+                self._maintenance_lock_acquired = False
 
     def empty(self):
         """Removes all messages on the queue.

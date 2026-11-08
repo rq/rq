@@ -89,6 +89,22 @@ class TestQueue(RQTestCase):
         self.assertTrue(contender.acquire_maintenance_lock())
         contender.release_maintenance_lock()
 
+    def test_maintenance_lock_cannot_be_reacquired_before_release(self):
+        owner = Queue('maintenance', connection=self.connection)
+        contender = Queue('maintenance', connection=self.connection)
+
+        self.assertTrue(owner.acquire_maintenance_lock())
+        self.connection.pexpire(owner.registry_cleaning_key, 0)
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            self.assertFalse(executor.submit(owner.acquire_maintenance_lock).result(timeout=5))
+
+        self.assertTrue(contender.acquire_maintenance_lock())
+        owner.release_maintenance_lock()
+        self.assertFalse(owner.acquire_maintenance_lock())
+        contender.release_maintenance_lock()
+        self.assertTrue(owner.acquire_maintenance_lock())
+        owner.release_maintenance_lock()
+
     def test_expired_maintenance_lock_cannot_release_new_owner(self):
         expired_owner = Queue('maintenance', connection=self.connection)
         new_owner = Queue('maintenance', connection=self.connection)

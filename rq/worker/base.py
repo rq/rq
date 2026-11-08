@@ -480,11 +480,13 @@ class BaseWorker:
             # If there are multiple workers running, we only want 1 worker
             # to run clean_registries().
             if queue.acquire_maintenance_lock():
-                self.log.info('Worker %s: cleaning registries for queue: %s', self.name, queue.name)
-                clean_registries(queue, self._exc_handlers)
-                worker_registration.clean_worker_registry(queue)
-                queue.intermediate_queue.cleanup(self, queue)
-                queue.release_maintenance_lock()
+                try:
+                    self.log.info('Worker %s: cleaning registries for queue: %s', self.name, queue.name)
+                    clean_registries(queue, self._exc_handlers)
+                    worker_registration.clean_worker_registry(queue)
+                    queue.intermediate_queue.cleanup(self, queue)
+                finally:
+                    queue.release_maintenance_lock()
         self.last_cleaned_at = now()
 
     def clean_group_registries(self):

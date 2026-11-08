@@ -1301,6 +1301,17 @@ class TestWorker(RQTestCase):
         self.assertEqual(len(foo_registry), 0)
         self.assertEqual(len(bar_registry), 0)
 
+    def test_maintenance_lock_is_released_when_cleanup_fails(self):
+        queue = Queue(connection=self.connection)
+        worker = Worker([queue], connection=self.connection)
+
+        with mock.patch('rq.worker.base.clean_registries', side_effect=RuntimeError('cleanup failed')):
+            with self.assertRaisesRegex(RuntimeError, 'cleanup failed'):
+                worker.clean_registries()
+
+        self.assertTrue(queue.acquire_maintenance_lock())
+        queue.release_maintenance_lock()
+
     def test_should_run_maintenance_tasks(self):
         """Workers should run maintenance tasks on startup and every hour."""
         queue = Queue(connection=self.connection)
