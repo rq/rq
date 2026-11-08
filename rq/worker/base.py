@@ -258,8 +258,9 @@ class BaseWorker:
 
         try:
             self.ip_address = str(connection.client_info()['addr'])
-        except redis.exceptions.ResponseError:
-            # CLIENT INFO needs Redis 6.2. CLIENT LIST works on older servers but returns every connection.
+        except (redis.exceptions.ResponseError, KeyError):
+            # CLIENT INFO needs Redis 6.2, and redis-py < 6.3 fails to parse replies that omit
+            # integer fields (seen with Redis Enterprise). CLIENT LIST works in both cases.
             self.ip_address = self._ip_address_from_client_list(connection)
 
     def _ip_address_from_client_list(self, connection: Redis) -> str:
