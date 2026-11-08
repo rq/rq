@@ -213,7 +213,7 @@ class Queue:
         prefix = self.redis_queue_namespace_prefix
         self.name = name
         self._key = f'{prefix}{name}'
-        self._maintenance_lock = self.connection.lock(self.registry_cleaning_key, timeout=899)
+        self._maintenance_lock = self.connection.lock(self.registry_cleaning_key, timeout=899, thread_local=False)
         self._default_timeout = parse_timeout(default_timeout) or self.DEFAULT_TIMEOUT
         self._is_async = is_async
         self.log = logger

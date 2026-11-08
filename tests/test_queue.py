@@ -1,4 +1,5 @@
 import json
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
@@ -62,6 +63,28 @@ class TestQueue(RQTestCase):
 
         self.assertTrue(owner.acquire_maintenance_lock())
         self.assertFalse(contender.acquire_maintenance_lock())
+        owner.release_maintenance_lock()
+        self.assertTrue(contender.acquire_maintenance_lock())
+        contender.release_maintenance_lock()
+
+    def test_maintenance_lock_can_be_released_from_another_thread(self):
+        owner = Queue('maintenance', connection=self.connection)
+        contender = Queue('maintenance', connection=self.connection)
+
+        self.assertTrue(owner.acquire_maintenance_lock())
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            executor.submit(owner.release_maintenance_lock).result(timeout=5)
+
+        self.assertTrue(contender.acquire_maintenance_lock())
+        contender.release_maintenance_lock()
+
+    def test_maintenance_lock_acquired_in_another_thread_can_be_released(self):
+        owner = Queue('maintenance', connection=self.connection)
+        contender = Queue('maintenance', connection=self.connection)
+
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            self.assertTrue(executor.submit(owner.acquire_maintenance_lock).result(timeout=5))
+
         owner.release_maintenance_lock()
         self.assertTrue(contender.acquire_maintenance_lock())
         contender.release_maintenance_lock()
