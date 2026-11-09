@@ -60,6 +60,10 @@ class TestRetry(RQTestCase):
         self.assertRaises(ValueError, Retry, max=1, interval=-5)
         self.assertRaises(ValueError, Retry, max=1, interval=[1, -5])
 
+        # interval must be an int or an iterable of ints
+        self.assertRaises(TypeError, Retry, max=1, interval=1.5)
+        self.assertRaises(TypeError, Retry, max=1, interval=None)
+
     def test_retry_interval_from_iterator(self):
         """Retry keeps intervals given as a one-shot iterator"""
         retry = Retry(max=2, interval=(i for i in [10, 20]))
