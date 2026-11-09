@@ -249,6 +249,7 @@ class BaseWorker:
             self.push_exc_handler(exception_handlers)
 
     def _set_ip_address(self, connection: Redis) -> None:
+        """Set the worker's IP address from CLIENT INFO, falling back to CLIENT LIST."""
         try:
             connection.client_setname(self.name)
         except redis.exceptions.ResponseError:
