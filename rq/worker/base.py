@@ -264,6 +264,7 @@ class BaseWorker:
             self.ip_address = self._ip_address_from_client_list(connection)
 
     def _ip_address_from_client_list(self, connection: Redis) -> str:
+        """Get this worker's own address from CLIENT LIST, or 'unknown' when unsupported."""
         try:
             client_addresses = [
                 client['addr'] for client in connection.client_list() if client.get('name') == self.name
