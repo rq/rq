@@ -216,23 +216,6 @@ class TestWorker(RQTestCase):
         mock_client_list.assert_called_once()
         self.assertNotEqual(w.ip_address, 'unknown')
 
-    def test_create_worker_falls_back_to_client_list_on_client_info_parse_error(self):
-        """Worker creation lists clients when CLIENT INFO parsing raises KeyError (redis-py<6.3)."""
-        q = Queue('foo', connection=self.connection)
-
-        with mock.patch.object(self.connection, 'client_setname') as mock_client_setname:
-            with mock.patch.object(self.connection, 'client_info', side_effect=KeyError('qbuf-free')):
-                with mock.patch.object(
-                    self.connection,
-                    'client_list',
-                    side_effect=lambda *args, **kwargs: [
-                        {'addr': '10.0.0.5:51234', 'name': mock_client_setname.call_args[0][0]}
-                    ],
-                ) as mock_client_list:
-                    w = Worker([q], connection=self.connection)
-
-        mock_client_list.assert_called_once()
-        self.assertEqual(w.ip_address, '10.0.0.5:51234')
 
         # CLIENT INFO reply cannot be parsed (redis-py<6.3).
         with mock.patch.object(self.connection, 'client_setname') as mock_client_setname:
