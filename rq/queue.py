@@ -306,6 +306,12 @@ class Queue:
         Returns:
             script (...): The Lua Script is called.
         """
+        count, rate_limit_keys = self._delete_queued_jobs()
+        self._release_rate_limit_slots(rate_limit_keys)
+        return count
+
+    def _delete_queued_jobs(self) -> tuple[int, set[str]]:
+        """Deletes the jobs on the queue. Returns their count and their rate limit keys."""
         from .results import Result
 
         script = f"""
@@ -313,10 +319,16 @@ class Queue:
             local result_prefix = "{Result.get_key('')}"
             local q = KEYS[1]
             local count = 0
+            local rate_limit_keys = {{}}
             while true do
                 local job_id = redis.call("lpop", q)
                 if job_id == false then
                     break
+                end
+
+                local rate_limit_key = redis.call("hget", prefix..job_id, "rate_limit_key")
+                if rate_limit_key then
+                    table.insert(rate_limit_keys, rate_limit_key)
                 end
 
                 -- Delete the relevant keys
@@ -324,10 +336,16 @@ class Queue:
                 redis.call("del", prefix..job_id..":dependents")
                 count = count + 1
             end
-            return count
+            return {{count, rate_limit_keys}}
         """.encode()
         script = self.connection.register_script(script)
-        return script(keys=[self.key])
+        count, rate_limit_keys = script(keys=[self.key])
+        return count, {as_text(key) for key in rate_limit_keys}
+
+    def _release_rate_limit_slots(self, rate_limit_keys: set[str]) -> None:
+        """Frees slots held by deleted jobs, which would otherwise stay held until maintenance."""
+        for rate_limit_key in rate_limit_keys:
+            RateLimitRegistry(rate_limit_key, connection=self.connection).cleanup()
 
     def delete(self, delete_jobs: bool = True):
         """Deletes the queue.
@@ -335,13 +353,17 @@ class Queue:
         Args:
             delete_jobs (bool): If true, removes all the associated messages on the queue first.
         """
+        rate_limit_keys: set[str] = set()
         if delete_jobs:
-            self.empty()
+            _, rate_limit_keys = self._delete_queued_jobs()
 
         with self.connection.pipeline() as pipeline:
             pipeline.srem(self.redis_queues_keys, self._key)
             pipeline.delete(self._key)
             pipeline.execute()
+
+        # After the key is gone, so that a job promoted onto this queue is not deleted with it
+        self._release_rate_limit_slots(rate_limit_keys)
 
     def is_empty(self) -> bool:
         """Returns whether the current queue is empty.
