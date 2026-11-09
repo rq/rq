@@ -216,7 +216,6 @@ class TestWorker(RQTestCase):
         mock_client_list.assert_called_once()
         self.assertNotEqual(w.ip_address, 'unknown')
 
-
         # CLIENT INFO reply cannot be parsed (redis-py<6.3).
         with mock.patch.object(self.connection, 'client_setname') as mock_client_setname:
             with mock.patch.object(self.connection, 'client_info', side_effect=KeyError('qbuf-free')):
