@@ -364,6 +364,9 @@ class Queue:
 
         # After the key is gone, so that a job promoted onto this queue is not deleted with it
         self._release_rate_limit_slots(rate_limit_keys)
+        # Promotion pushes onto the queue's list without registering the queue, as enqueue does
+        if rate_limit_keys and self.connection.exists(self._key):
+            self.connection.sadd(self.redis_queues_keys, self._key)
 
     def is_empty(self) -> bool:
         """Returns whether the current queue is empty.

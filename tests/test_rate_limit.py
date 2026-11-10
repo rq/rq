@@ -519,6 +519,7 @@ class TestRateLimitEnqueue(RQTestCase):
 
         self.assertEqual(registry.get_allowed_job_ids(), [waiting.id])
         self.assertEqual(self.queue.job_ids, [waiting.id])
+        self.assertIn(self.queue.name, [queue.name for queue in Queue.all(connection=self.connection)])
 
     def test_enqueue_with_rate_limit(self):
         """Jobs exceeding concurrency limit are deferred, others are queued."""
