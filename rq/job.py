@@ -1941,6 +1941,8 @@ class Retry:
             for i in intervals:
                 if i < 0:
                     raise ValueError('interval: negative numbers are not allowed')
+        else:
+            raise TypeError('interval: must be an int or an iterable of ints')
 
         self.max = max
         self.intervals = intervals
@@ -1958,7 +1960,7 @@ class Retry:
         """Returns the appropriate retry interval based on retry count and intervals.
         If intervals is an integer, returns that value directly.
         If intervals is a list and retry count is bigger than length of intervals,
-        the first value in the list will be used.
+        the last value in the list will be used.
 
         Args:
             count (int): The current retry count
