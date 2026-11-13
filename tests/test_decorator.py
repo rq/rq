@@ -43,6 +43,18 @@ class TestDecorator(RQTestCase):
         result = hello.enqueue()
         self.assertEqual(result.origin, 'queue_name')
 
+    def test_decorator_accepts_queue_name_as_call_argument(self):
+        """Ensure that passing in queue name to the decorated function callsite
+        puts the job in the right queue.
+        """
+
+        @job(queue='default_queue_name', connection=self.connection)
+        def hello():
+            return 'Hi'
+
+        result = hello.enqueue(queue="queue_name")
+        self.assertEqual(result.origin, 'queue_name')
+
     def test_decorator_accepts_result_ttl_as_argument(self):
         """Check the worker default and explicit result TTL overrides."""
         result = self.decorated_job.enqueue(1, 2)
