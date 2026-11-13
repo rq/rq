@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import importlib
 import json
 import logging
 import re
@@ -14,6 +15,11 @@ from typing import TYPE_CHECKING, Any, cast
 from uuid import uuid4
 
 from redis import WatchError
+
+try:
+    zstd: Any = importlib.import_module('compression.zstd')
+except ImportError:
+    zstd = None
 
 from .defaults import CALLBACK_TIMEOUT, RQ_KEY_PREFIX, UNSERIALIZABLE_RETURN_VALUE_PAYLOAD
 from .types import FailureCallbackType, SuccessCallbackType
@@ -49,6 +55,39 @@ from .utils import (
     utcformat,
 )
 from .webhook import Webhook
+
+ZSTD_MAGIC = b'\x28\xb5\x2f\xfd'
+
+
+def _compress(data: bytes, use_zstd: bool = False) -> bytes:
+    """Compress data using Zlib by default or Zstandard when enabled."""
+    if use_zstd:
+        if zstd is None:
+            raise RuntimeError(
+                'Zstandard compression requires Python 3.14 or newer.'
+            )
+        return zstd.compress(data)
+
+    return zlib.compress(data)
+
+
+def _decompress(data: bytes) -> bytes:
+    """Decompress Zstandard, Zlib, or legacy uncompressed data."""
+    if data.startswith(ZSTD_MAGIC) and zstd is None:
+        raise RuntimeError(
+            'Cannot decompress Zstandard data without Zstandard support.'
+        )
+    if zstd is not None:
+        try:
+            return zstd.decompress(data)
+        except zstd.ZstdError:
+            pass
+
+    try:
+        return zlib.decompress(data)
+    except zlib.error:
+        # Support legacy uncompressed data.
+        return data
 
 logger = logging.getLogger('rq.job')
 
@@ -176,7 +215,14 @@ class Job:
     _dependency: Job | None
     redis_job_namespace_prefix = RQ_KEY_PREFIX + ':job:'
 
-    def __init__(self, id: str | None = None, connection: Redis | None = None, serializer=None):
+    def __init__(
+        self,
+        id: str | None = None,
+        connection: Redis | None = None,
+        serializer=None,
+        *,
+        use_zstd: bool = False,
+    ):
         # Manually check for the presence of the connection argument to preserve
         # backwards compatibility during the transition to RQ v2.0.0.
         if not connection:
@@ -219,6 +265,7 @@ class Job:
         # Stored meta that could not be deserialized here, kept so a save writes it back unchanged.
         self._unreadable_meta: bytes | None = None
         self.serializer = resolve_serializer(serializer)
+        self.use_zstd = use_zstd
         # Tracks remaining retries for exception-based retry. Set to retry.max when a job
         # is enqueued with retry=Retry(...) via queue.enqueue(). Decremented each time
         # the job raises an exception and is retried via job.retry().
@@ -264,6 +311,7 @@ class Job:
         serializer=None,
         group_id: str | None = None,
         *,
+        use_zstd: bool = False,
         on_success: Callback | Callable[..., Any] | None = None,  # Callable is deprecated
         on_failure: Callback | Callable[..., Any] | None = None,  # Callable is deprecated
         on_stopped: Callback | Callable[..., Any] | None = None,  # Callable is deprecated
@@ -309,6 +357,8 @@ class Job:
             webhooks (Optional[Sequence[Webhook]], optional): Webhooks to send when the job reaches a matching
                 terminal state (`finished` or `failed`). Defaults to None.
             group_id (Optional[str], optional): A group ID that the job is being added to. Defaults to None.
+            use_zstd (bool, optional): Whether to use Zstandard compression for this job.
+                Defaults to False.
 
         Raises:
             TypeError: If `args` is not a tuple/list
@@ -327,7 +377,12 @@ class Job:
         if kwargs is None:
             kwargs = {}
 
-        job = cls(connection=connection, serializer=serializer)
+        job = cls(
+            connection=connection,
+            serializer=serializer,
+        )
+        job.use_zstd = use_zstd
+
         if id is not None:
             job.id = id
 
@@ -976,12 +1031,8 @@ class Job:
             raw_data = obj['data']
         except KeyError:
             raise NoSuchJobError(f'Unexpected job format: {obj}')
-
-        try:
-            self.data = zlib.decompress(raw_data)
-        except zlib.error:
-            # Fallback to uncompressed string
-            self.data = raw_data
+        self.use_zstd = raw_data.startswith(ZSTD_MAGIC)
+        self.data = _decompress(raw_data)
 
         self.created_at = str_to_date(v) if (v := obj.get('created_at')) else now()
         self.origin = as_text(obj['origin']) if obj.get('origin') else ''
@@ -1066,11 +1117,8 @@ class Job:
 
         raw_exc_info = obj.get('exc_info')
         if raw_exc_info:
-            try:
-                self._exc_info = as_text(zlib.decompress(raw_exc_info))
-            except zlib.error:
-                # Fallback to uncompressed string
-                self._exc_info = as_text(raw_exc_info)
+            self._exc_info = as_text(_decompress(raw_exc_info))
+
 
     # Persistence
     def refresh(self):  # noqa
@@ -1099,7 +1147,7 @@ class Job:
         """
         obj: dict[str, Any] = {
             'created_at': utcformat(self.created_at or now()),
-            'data': zlib.compress(self.data),
+           'data': _compress(self.data, use_zstd=self.use_zstd),
             'success_callback_name': self._success_callback_name if self._success_callback_name else '',
             'failure_callback_name': self._failure_callback_name if self._failure_callback_name else '',
             'stopped_callback_name': self._stopped_callback_name if self._stopped_callback_name else '',
@@ -1142,7 +1190,11 @@ class Job:
             except:  # noqa
                 obj['result'] = 'Unserializable return value'
         if self._exc_info is not None and include_result:
-            obj['exc_info'] = zlib.compress(str(self._exc_info).encode('utf-8'))
+            obj['exc_info'] = _compress(
+                str(self._exc_info).encode('utf-8'),
+                use_zstd=self.use_zstd,
+            )
+
         if self.timeout is not None:
             obj['timeout'] = self.timeout
         if self._success_callback_timeout is not None:
