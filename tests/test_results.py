@@ -8,6 +8,7 @@ from rq.job import Job, Retry
 from rq.queue import Queue
 from rq.registry import StartedJobRegistry
 from rq.results import Result
+from rq.serializers import JSONSerializer, PickleSerializer
 from rq.utils import now
 from rq.worker import Worker
 from tests import RQTestCase, min_redis_version
@@ -17,6 +18,44 @@ from .fixtures import div_by_zero, say_hello
 
 @min_redis_version((5, 0, 0))
 class TestResult(RQTestCase):
+    def test_restore_preserves_serializer(self):
+        """Restoring a result retains the serializer used to read its payload."""
+        for serializer in ('json', 'rq.serializers.JSONSerializer', JSONSerializer, JSONSerializer(), None):
+            with self.subTest(serializer=serializer):
+                queue = Queue(connection=self.connection, serializer=serializer)
+                job = queue.enqueue(say_hello)
+                Result.create(job, Result.Type.SUCCESSFUL, ttl=120, return_value={'message': 'hello 😀'})
+
+                result = job.latest_result()
+                self.assertEqual(result.return_value, {'message': 'hello 😀'})
+                self.assertIs(result.serializer, job.serializer)
+
+    def test_restored_json_result_can_be_saved_again(self):
+        """Saving a restored JSON result keeps its payload readable as JSON."""
+        queue = Queue(connection=self.connection, serializer=JSONSerializer)
+        job = queue.enqueue(say_hello)
+        value = {'message': 'hello 😀', 'items': [True, 1, None]}
+        Result.create(job, Result.Type.SUCCESSFUL, ttl=120, return_value=value)
+
+        result = job.latest_result()
+        result.save(ttl=120)
+
+        self.assertEqual(job.latest_result().return_value, value)
+        self.assertEqual(len(job.results()), 2)
+
+    def test_restored_pickle_result_can_be_saved_again(self):
+        """The default serializer remains compatible with restored results."""
+        queue = Queue(connection=self.connection)
+        job = queue.enqueue(say_hello)
+        value = {'items': (True, 1, None)}
+        Result.create(job, Result.Type.SUCCESSFUL, ttl=120, return_value=value)
+
+        result = job.latest_result()
+        result.save(ttl=120)
+
+        self.assertIs(result.serializer, PickleSerializer)
+        self.assertEqual(job.latest_result().return_value, value)
+
     def test_save_and_get_result(self):
         """Ensure data is saved properly"""
         queue = Queue(connection=self.connection)
