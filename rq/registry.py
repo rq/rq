@@ -438,8 +438,15 @@ class StartedJobRegistry(BaseRegistry):
             job (Job): The Job to remove from the registry
             pipeline (Optional['Pipeline']): The Redis Pipeline. Defaults to None.
         """
+        from .executions import Execution
+
         connection = pipeline if pipeline is not None else self.connection
-        execution_ids = [execution.composite_key for execution in job.get_executions()]
+        # Build composite keys from the registry's IDs. Do not fetch the executions: a hash
+        # can have expired or lack fields, and only the key is needed here.
+        execution_ids = [
+            Execution(id=execution_id, job_id=job.id, connection=self.connection).composite_key
+            for execution_id in job.execution_registry.get_execution_ids()
+        ]
         if execution_ids:
             connection.zrem(self.key, *execution_ids)
 
