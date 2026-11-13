@@ -285,8 +285,7 @@ class RQScheduler:
                         if not job.has_rate_limit:
                             queue._enqueue_job(job, pipeline=pipeline, at_front=job.should_enqueue_at_front())
                             registry.remove(job.id, pipeline=pipeline)
-                    for job in due_jobs:
-                        if job.has_rate_limit:
+                        else:
                             registry.remove(job.id, pipeline=pipeline)
                             queue._enqueue_rate_limited_job(
                                 job, pipeline=pipeline, at_front=job.should_enqueue_at_front()
