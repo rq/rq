@@ -658,36 +658,37 @@ class ScheduledJobRegistry(BaseRegistry):
         Rate-limited jobs wait for capacity. Raises InvalidJobOperation if the
         job is no longer scheduled.
         """
-        return self._enqueue_now(job_or_id, at_front=at_front, reset_execution=False)
+        job = self._enqueue_scheduled_job(job_or_id, at_front=at_front)
+        if job is None:
+            job_id = job_or_id.id if isinstance(job_or_id, Job) else job_or_id
+            raise InvalidJobOperation(f'Job {job_id} is no longer scheduled in queue {self.name}')
+        return job
 
     def requeue(self, job_or_id: Job | str, at_front: bool = False) -> Job:
         """Enqueue a scheduled job immediately and clear its previous execution fields."""
-        return self._enqueue_now(job_or_id, at_front=at_front, reset_execution=True)
-
-    def _enqueue_now(self, job_or_id: Job | str, *, at_front: bool, reset_execution: bool) -> Job:
-        job_id = job_or_id.id if isinstance(job_or_id, Job) else job_or_id
-        serializer = job_or_id.serializer if isinstance(job_or_id, Job) else self.serializer
-        queue = self._queue or Queue(
-            self.name, connection=self.connection, job_class=self.job_class, serializer=self.serializer
-        )
-        job = self._enqueue_scheduled_job(
-            queue, job_id, at_front=at_front, serializer=serializer, reset_execution=reset_execution
-        )
+        job = self._enqueue_scheduled_job(job_or_id, at_front=at_front, reset_execution=True)
         if job is None:
+            job_id = job_or_id.id if isinstance(job_or_id, Job) else job_or_id
             raise InvalidJobOperation(f'Job {job_id} is no longer scheduled in queue {self.name}')
         return job
 
     def _enqueue_scheduled_job(
         self,
-        queue: Queue,
-        job_id: str,
+        job_or_id: Job | str,
         *,
+        queue: Queue | None = None,
         due_by: int | None = None,
         at_front: bool | None = None,
-        serializer: Serializer | None = None,
         reset_execution: bool = False,
     ) -> Job | None:
         """Move a single registry entry, checking its current score before enqueueing."""
+        job_id = job_or_id.id if isinstance(job_or_id, Job) else job_or_id
+        queue = (
+            queue
+            or self._queue
+            or Queue(self.name, connection=self.connection, job_class=self.job_class, serializer=self.serializer)
+        )
+        serializer = job_or_id.serializer if isinstance(job_or_id, Job) else queue.serializer
         job_class = queue.job_class
         job_key = job_class.key_for(job_id)
         queue.get_redis_server_version()
@@ -705,7 +706,7 @@ class ScheduledJobRegistry(BaseRegistry):
                     status = data.get(b'status') or data.get('status')
                     # Low-level registry.schedule() also accepts a freshly saved job.
                     if data and (not status or as_text(status) in (JobStatus.SCHEDULED.value, JobStatus.CREATED.value)):
-                        job = job_class(job_id, connection=self.connection, serializer=serializer or queue.serializer)
+                        job = job_class(job_id, connection=self.connection, serializer=serializer)
                         job.restore(data)
 
                     pipe.multi()

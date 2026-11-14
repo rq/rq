@@ -253,7 +253,7 @@ class RQScheduler:
                 registry.name, connection=self.connection, job_class=self.job_class, serializer=self.serializer
             )
             for job_id in job_ids:
-                registry._enqueue_scheduled_job(queue, job_id, due_by=timestamp)
+                registry._enqueue_scheduled_job(job_id, queue=queue, due_by=timestamp)
         self._status = self.Status.STARTED
 
     def _install_signal_handlers(self):
