@@ -25,6 +25,37 @@ class TestGroup(RQTestCase):
         assert len(group.get_jobs()) == 2
         q.empty()
 
+    def test_enqueue_many_with_empty_iterable(self):
+        q = Queue(connection=self.connection)
+        group = Group.create(connection=self.connection)
+        for job_datas in ([], iter(())):
+            with self.subTest(job_datas=job_datas):
+                assert group.enqueue_many(q, job_datas) == []
+                assert q.count == 0
+                assert not self.connection.exists(group.key)
+                assert not self.connection.sismember(Group.REDIS_GROUP_KEY, group.name)
+
+    def test_enqueue_many_with_empty_iterable_preserves_group(self):
+        q = Queue(connection=self.connection)
+        group = Group.create(connection=self.connection)
+        jobs = group.enqueue_many(q, [self.job_1_data])
+        assert group.enqueue_many(q, []) == []
+        self.assertCountEqual(group.get_jobs(), jobs)
+        assert self.connection.sismember(Group.REDIS_GROUP_KEY, group.name)
+        assert q.count == 1
+
+    def test_enqueue_many_with_empty_iterable_does_not_execute_pipeline(self):
+        q = Queue(connection=self.connection)
+        group = Group.create(connection=self.connection)
+        with self.connection.pipeline() as pipe:
+            pipe.set('caller-command', 'pending')
+            assert group.enqueue_many(q, iter(()), pipeline=pipe) == []
+            assert not self.connection.exists('caller-command')
+            pipe.execute()
+        assert self.connection.get('caller-command') == b'pending'
+        assert not self.connection.exists(group.key)
+        assert not self.connection.sismember(Group.REDIS_GROUP_KEY, group.name)
+
     def test_group_cleanup_with_no_jobs(self):
         q = Queue(connection=self.connection)
         group = Group.create(connection=self.connection)

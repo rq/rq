@@ -47,6 +47,8 @@ class Group:
         pipe = pipeline if pipeline else self.connection.pipeline()
 
         jobs = queue.enqueue_many(job_datas, group_id=self.name, pipeline=pipe)
+        if not jobs:
+            return jobs
 
         self._add_jobs(jobs, pipeline=pipe)
 
