@@ -145,6 +145,19 @@ class TestRetry(RQTestCase):
         # status should be queued
         self.assertEqual(job.get_status(), JobStatus.QUEUED)
 
+    def test_job_retry_with_empty_intervals(self):
+        queue = Queue(connection=self.connection)
+        job = queue.enqueue(div_by_zero, retry=Retry(max=2, interval=[]))
+        job = Job.fetch(job.id, connection=self.connection)
+
+        with self.connection.pipeline() as pipeline:
+            job.retry(queue, pipeline)
+            pipeline.execute()
+
+        job.refresh()
+        self.assertEqual(job.get_status(), JobStatus.QUEUED)
+        self.assertEqual(job.retries_left, 1)
+
     def test_job_create_with_retry(self):
         """Job.create(..., retry=...) works properly"""
         queue = Queue(connection=self.connection)
