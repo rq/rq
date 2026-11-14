@@ -33,26 +33,50 @@ class CustomRedisConnection(redis.Connection):
 
 
 class TestScheduledJobRegistry(RQTestCase):
-    def test_requeue_future_job_at_front(self):
+    def test_enqueue_future_job_at_front(self):
         queue = Queue(connection=self.connection)
         queued = queue.enqueue(say_hello)
         scheduled = queue.enqueue_in(timedelta(hours=1), say_hello)
         registry = queue.scheduled_job_registry
 
-        registry.requeue(scheduled.id, at_front=True)
+        registry.enqueue(scheduled.id, at_front=True)
 
         self.assertEqual(queue.job_ids, [scheduled.id, queued.id])
         self.assertEqual(scheduled.get_status(), JobStatus.QUEUED)
         self.assertNotIn(scheduled, registry)
 
-    def test_requeue_rate_limited_job_waits_for_capacity(self):
+    def test_requeue_clears_previous_execution_fields(self):
+        queue = Queue(connection=self.connection)
+        job = queue.enqueue_in(timedelta(hours=1), say_hello)
+        job.started_at = job.ended_at = datetime(2019, 1, 1, tzinfo=timezone.utc)
+        job._exc_info = 'previous failure'
+        job.save()
+
+        queue.scheduled_job_registry.requeue(job.id)
+        job.refresh()
+
+        self.assertIsNone(job.started_at)
+        self.assertIsNone(job.ended_at)
+        self.assertEqual(job._exc_info, '')
+
+    def test_requeue_uses_passed_jobs_serializer(self):
+        queue = Queue(connection=self.connection, serializer=JSONSerializer)
+        job = queue.enqueue_in(timedelta(hours=1), say_hello, meta={'attempt': 1})
+        registry = ScheduledJobRegistry(queue.name, connection=self.connection)
+
+        requeued = registry.requeue(job)
+
+        self.assertIs(requeued.serializer, JSONSerializer)
+        self.assertEqual(requeued.meta, {'attempt': 1})
+
+    def test_enqueue_rate_limited_job_waits_for_capacity(self):
         queue = Queue(connection=self.connection)
         limit = RateLimit(key='scheduled', concurrency=1)
         queued = queue.enqueue(say_hello, rate_limit=limit)
         scheduled = queue.enqueue_in(timedelta(hours=1), say_hello, rate_limit=limit)
         registry = queue.scheduled_job_registry
 
-        registry.requeue(scheduled)
+        registry.enqueue(scheduled)
 
         self.assertNotIn(scheduled, registry)
         self.assertEqual(queue.job_ids, [queued.id])
@@ -60,14 +84,14 @@ class TestScheduledJobRegistry(RQTestCase):
         limiter = RateLimitRegistry.from_job(scheduled)
         self.assertEqual(limiter.release_and_enqueue(queued.id), [scheduled.id])
 
-    def test_requeue_rate_limited_job_returns_promoted_status(self):
+    def test_enqueue_rate_limited_job_returns_promoted_status(self):
         queue = Queue(connection=self.connection)
         limit = RateLimit(key='scheduled', concurrency=1)
         scheduled = queue.enqueue_in(timedelta(hours=1), say_hello, rate_limit=limit)
 
-        requeued = queue.scheduled_job_registry.requeue(scheduled)
+        enqueued = queue.scheduled_job_registry.enqueue(scheduled)
 
-        self.assertEqual(requeued.get_status(refresh=False), JobStatus.QUEUED)
+        self.assertEqual(enqueued.get_status(refresh=False), JobStatus.QUEUED)
         self.assertEqual(queue.job_ids, [scheduled.id])
 
     def test_get_jobs_to_enqueue(self):
@@ -505,7 +529,7 @@ class TestScheduler(RQTestCase):
         self.assertEqual(queue.job_ids, [job.id])
         self.assertNotIn(job, registry)
 
-    def test_scheduler_wins_before_manual_requeue(self):
+    def test_scheduler_wins_before_manual_enqueue(self):
         queue = Queue(connection=self.connection)
         job = queue.enqueue_in(timedelta(seconds=-1), say_hello)
         registry = queue.scheduled_job_registry
@@ -514,7 +538,7 @@ class TestScheduler(RQTestCase):
 
         scheduler.enqueue_scheduled_jobs()
         with self.assertRaises(InvalidJobOperation):
-            registry.requeue(job)
+            registry.enqueue(job)
 
         self.assertEqual(queue.job_ids, [job.id])
         self.assertNotIn(job, registry)

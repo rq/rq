@@ -652,22 +652,40 @@ class ScheduledJobRegistry(BaseRegistry):
         # make sense in this context
         self.get_jobs_to_enqueue = self.get_expired_job_ids
 
-    def requeue(self, job_or_id: Job | str, at_front: bool = False) -> Job:
-        """Move a scheduled job to its queue immediately, even if it is not due.
+    def enqueue(self, job_or_id: Job | str, at_front: bool = False) -> Job:
+        """Enqueue a scheduled job immediately, even if it is not due.
 
-        Raises InvalidJobOperation if the job is no longer scheduled.
+        Rate-limited jobs wait for capacity. Raises InvalidJobOperation if the
+        job is no longer scheduled.
         """
+        return self._enqueue_now(job_or_id, at_front=at_front, reset_execution=False)
+
+    def requeue(self, job_or_id: Job | str, at_front: bool = False) -> Job:
+        """Enqueue a scheduled job immediately and clear its previous execution fields."""
+        return self._enqueue_now(job_or_id, at_front=at_front, reset_execution=True)
+
+    def _enqueue_now(self, job_or_id: Job | str, *, at_front: bool, reset_execution: bool) -> Job:
         job_id = job_or_id.id if isinstance(job_or_id, Job) else job_or_id
+        serializer = job_or_id.serializer if isinstance(job_or_id, Job) else self.serializer
         queue = self._queue or Queue(
             self.name, connection=self.connection, job_class=self.job_class, serializer=self.serializer
         )
-        job = self._enqueue_scheduled_job(queue, job_id, at_front=at_front)
+        job = self._enqueue_scheduled_job(
+            queue, job_id, at_front=at_front, serializer=serializer, reset_execution=reset_execution
+        )
         if job is None:
             raise InvalidJobOperation(f'Job {job_id} is no longer scheduled in queue {self.name}')
         return job
 
     def _enqueue_scheduled_job(
-        self, queue: Queue, job_id: str, *, due_by: int | None = None, at_front: bool | None = None
+        self,
+        queue: Queue,
+        job_id: str,
+        *,
+        due_by: int | None = None,
+        at_front: bool | None = None,
+        serializer: Serializer | None = None,
+        reset_execution: bool = False,
     ) -> Job | None:
         """Move a single registry entry, checking its current score before enqueueing."""
         job_class = queue.job_class
@@ -687,14 +705,20 @@ class ScheduledJobRegistry(BaseRegistry):
                     status = data.get(b'status') or data.get('status')
                     # Low-level registry.schedule() also accepts a freshly saved job.
                     if data and (not status or as_text(status) in (JobStatus.SCHEDULED.value, JobStatus.CREATED.value)):
-                        job = job_class(job_id, connection=self.connection, serializer=queue.serializer)
+                        job = job_class(job_id, connection=self.connection, serializer=serializer or queue.serializer)
                         job.restore(data)
 
                     pipe.multi()
                     self.remove(job_id, pipeline=pipe)
                     if job is not None:
                         front = job.should_enqueue_at_front() if at_front is None else at_front
+                        if reset_execution:
+                            job.started_at = None
+                            job.ended_at = None
+                            job._exc_info = ''
                         if job.has_rate_limit:
+                            if reset_execution:
+                                job.enqueue_at_front = front
                             queue._enqueue_rate_limited_job(job, pipeline=pipe, at_front=front)
                         elif not queue._is_async:
                             queue._prepare_for_queue(job)
