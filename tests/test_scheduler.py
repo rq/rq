@@ -8,8 +8,9 @@ import redis
 
 from rq import Queue
 from rq.defaults import DEFAULT_MAINTENANCE_TASK_INTERVAL
-from rq.exceptions import NoSuchJobError, SchedulerNotFound
+from rq.exceptions import InvalidJobOperation, NoSuchJobError, SchedulerNotFound
 from rq.job import Job, JobStatus, Retry
+from rq.rate_limit import RateLimit, RateLimitRegistry
 from rq.registry import FinishedJobRegistry, ScheduledJobRegistry
 from rq.scheduler import RQScheduler
 from rq.serializers import JSONSerializer
@@ -32,6 +33,43 @@ class CustomRedisConnection(redis.Connection):
 
 
 class TestScheduledJobRegistry(RQTestCase):
+    def test_requeue_future_job_at_front(self):
+        queue = Queue(connection=self.connection)
+        queued = queue.enqueue(say_hello)
+        scheduled = queue.enqueue_in(timedelta(hours=1), say_hello)
+        registry = queue.scheduled_job_registry
+
+        registry.requeue(scheduled.id, at_front=True)
+
+        self.assertEqual(queue.job_ids, [scheduled.id, queued.id])
+        self.assertEqual(scheduled.get_status(), JobStatus.QUEUED)
+        self.assertNotIn(scheduled, registry)
+
+    def test_requeue_rate_limited_job_waits_for_capacity(self):
+        queue = Queue(connection=self.connection)
+        limit = RateLimit(key='scheduled', concurrency=1)
+        queued = queue.enqueue(say_hello, rate_limit=limit)
+        scheduled = queue.enqueue_in(timedelta(hours=1), say_hello, rate_limit=limit)
+        registry = queue.scheduled_job_registry
+
+        registry.requeue(scheduled)
+
+        self.assertNotIn(scheduled, registry)
+        self.assertEqual(queue.job_ids, [queued.id])
+        self.assertEqual(scheduled.get_status(), JobStatus.RATE_LIMITED)
+        limiter = RateLimitRegistry.from_job(scheduled)
+        self.assertEqual(limiter.release_and_enqueue(queued.id), [scheduled.id])
+
+    def test_requeue_rate_limited_job_returns_promoted_status(self):
+        queue = Queue(connection=self.connection)
+        limit = RateLimit(key='scheduled', concurrency=1)
+        scheduled = queue.enqueue_in(timedelta(hours=1), say_hello, rate_limit=limit)
+
+        requeued = queue.scheduled_job_registry.requeue(scheduled)
+
+        self.assertEqual(requeued.get_status(refresh=False), JobStatus.QUEUED)
+        self.assertEqual(queue.job_ids, [scheduled.id])
+
     def test_get_jobs_to_enqueue(self):
         """Getting job ids to enqueue from ScheduledJobRegistry."""
         queue = Queue(connection=self.connection)
@@ -442,13 +480,62 @@ class TestScheduler(RQTestCase):
         scheduler.enqueue_scheduled_jobs()
         self.assertEqual(len(queue), 1)
 
-        # After job is scheduled, registry should be empty
+        # After the due job is enqueued, the registry should be empty.
         self.assertEqual(len(registry), 0)
-
-        # Jobs scheduled in the far future should not be affected
+        # Jobs scheduled in the far future should not be affected.
         registry.schedule(job, datetime(2100, 1, 1, tzinfo=timezone.utc))
         scheduler.enqueue_scheduled_jobs()
         self.assertEqual(len(queue), 1)
+
+    def test_manual_requeue_wins_after_scheduler_reads_due_ids(self):
+        queue = Queue(connection=self.connection)
+        job = queue.enqueue_in(timedelta(seconds=-1), say_hello)
+        registry = queue.scheduled_job_registry
+        scheduler = RQScheduler([queue], connection=self.connection)
+        scheduler.prepare_registries([queue.name])
+
+        def requeue_after_read(timestamp):
+            job_ids = registry.get_jobs_to_schedule(timestamp)
+            registry.requeue(job)
+            return job_ids
+
+        with mock.patch.object(scheduler._scheduled_job_registries[0], 'get_jobs_to_schedule', requeue_after_read):
+            scheduler.enqueue_scheduled_jobs()
+
+        self.assertEqual(queue.job_ids, [job.id])
+        self.assertNotIn(job, registry)
+
+    def test_scheduler_wins_before_manual_requeue(self):
+        queue = Queue(connection=self.connection)
+        job = queue.enqueue_in(timedelta(seconds=-1), say_hello)
+        registry = queue.scheduled_job_registry
+        scheduler = RQScheduler([queue], connection=self.connection)
+        scheduler.prepare_registries([queue.name])
+
+        scheduler.enqueue_scheduled_jobs()
+        with self.assertRaises(InvalidJobOperation):
+            registry.requeue(job)
+
+        self.assertEqual(queue.job_ids, [job.id])
+        self.assertNotIn(job, registry)
+
+    def test_scheduler_rechecks_score_after_reading_due_ids(self):
+        queue = Queue(connection=self.connection)
+        job = queue.enqueue_in(timedelta(seconds=-1), say_hello)
+        registry = queue.scheduled_job_registry
+        scheduler = RQScheduler([queue], connection=self.connection)
+        scheduler.prepare_registries([queue.name])
+
+        def reschedule_after_read(timestamp):
+            job_ids = registry.get_jobs_to_schedule(timestamp)
+            registry.schedule(job, datetime(2100, 1, 1, tzinfo=timezone.utc))
+            return job_ids
+
+        with mock.patch.object(scheduler._scheduled_job_registries[0], 'get_jobs_to_schedule', reschedule_after_read):
+            scheduler.enqueue_scheduled_jobs()
+
+        self.assertEqual(queue.job_ids, [])
+        self.assertIn(job, registry)
 
     def test_prepare_registries(self):
         """prepare_registries() creates self._scheduled_job_registries"""

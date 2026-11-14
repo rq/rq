@@ -245,44 +245,15 @@ class RQScheduler:
         for registry in self._scheduled_job_registries:
             timestamp = current_timestamp()
 
-            # TODO: try to use Lua script to make get_jobs_to_schedule()
-            # and remove_jobs() atomic
             job_ids = registry.get_jobs_to_schedule(timestamp)
-
             if not job_ids:
                 continue
 
             queue = self.queue_class(
                 registry.name, connection=self.connection, job_class=self.job_class, serializer=self.serializer
             )
-
-            jobs = self.job_class.fetch_many(job_ids, connection=self.connection, serializer=self.serializer)
-            normal_jobs = []
-            jobs_with_rate_limit = []
-            missing_job_ids = []
-
-            for job_id, job in zip(job_ids, jobs):
-                if job is None:
-                    missing_job_ids.append(job_id)
-                elif job.has_rate_limit:
-                    jobs_with_rate_limit.append(job)
-                else:
-                    normal_jobs.append(job)
-
-            if normal_jobs or missing_job_ids:
-                with self.connection.pipeline() as pipeline:
-                    for job in normal_jobs:
-                        queue._enqueue_job(job, pipeline=pipeline, at_front=job.should_enqueue_at_front())
-                        registry.remove(job.id, pipeline=pipeline)
-                    for job_id in missing_job_ids:
-                        registry.remove(job_id, pipeline=pipeline)
-                    pipeline.execute()
-
-            for job in jobs_with_rate_limit:
-                with self.connection.pipeline() as pipeline:
-                    registry.remove(job.id, pipeline=pipeline)
-                    queue._enqueue_rate_limited_job(job, pipeline=pipeline, at_front=job.should_enqueue_at_front())
-                    pipeline.execute()
+            for job_id in job_ids:
+                registry._enqueue_scheduled_job(queue, job_id, due_by=timestamp)
         self._status = self.Status.STARTED
 
     def _install_signal_handlers(self):

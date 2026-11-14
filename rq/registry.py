@@ -54,6 +54,7 @@ class BaseRegistry:
         serializer: Serializer | str | None = None,
         death_penalty_class: type[BaseDeathPenalty] | None = None,
     ):
+        self._queue = queue
         if queue:
             self.name = queue.name
             self.connection = queue.connection
@@ -650,6 +651,71 @@ class ScheduledJobRegistry(BaseRegistry):
         # the same as get_expired_job_ids, but get_expired_job_ids() doesn't
         # make sense in this context
         self.get_jobs_to_enqueue = self.get_expired_job_ids
+
+    def requeue(self, job_or_id: Job | str, at_front: bool = False) -> Job:
+        """Move a scheduled job to its queue immediately, even if it is not due.
+
+        Raises InvalidJobOperation if the job is no longer scheduled.
+        """
+        job_id = job_or_id.id if isinstance(job_or_id, Job) else job_or_id
+        queue = self._queue or Queue(
+            self.name, connection=self.connection, job_class=self.job_class, serializer=self.serializer
+        )
+        job = self._enqueue_scheduled_job(queue, job_id, at_front=at_front)
+        if job is None:
+            raise InvalidJobOperation(f'Job {job_id} is no longer scheduled in queue {self.name}')
+        return job
+
+    def _enqueue_scheduled_job(
+        self, queue: Queue, job_id: str, *, due_by: int | None = None, at_front: bool | None = None
+    ) -> Job | None:
+        """Move a single registry entry, checking its current score before enqueueing."""
+        job_class = queue.job_class
+        job_key = job_class.key_for(job_id)
+        queue.get_redis_server_version()
+        while True:
+            try:
+                with self.connection.pipeline() as pipe:
+                    pipe.watch(self.key, job_key)
+                    # After WATCH, reads execute immediately instead of returning the pipeline.
+                    score = cast('float | None', pipe.zscore(self.key, job_id))
+                    if score is None or (due_by is not None and not 0 <= score <= due_by):
+                        return None
+
+                    data = cast('dict[bytes | str, Any]', pipe.hgetall(job_key))
+                    job = None
+                    status = data.get(b'status') or data.get('status')
+                    # Low-level registry.schedule() also accepts a freshly saved job.
+                    if data and (not status or as_text(status) in (JobStatus.SCHEDULED.value, JobStatus.CREATED.value)):
+                        job = job_class(job_id, connection=self.connection, serializer=queue.serializer)
+                        job.restore(data)
+
+                    pipe.multi()
+                    self.remove(job_id, pipeline=pipe)
+                    if job is not None:
+                        front = job.should_enqueue_at_front() if at_front is None else at_front
+                        if job.has_rate_limit:
+                            queue._enqueue_rate_limited_job(job, pipeline=pipe, at_front=front)
+                        elif not queue._is_async:
+                            queue._prepare_for_queue(job)
+                            queue._persist_job(job, pipe)
+                        else:
+                            queue._enqueue_job(job, pipeline=pipe, at_front=front)
+                        if due_by is None and job.has_rate_limit:
+                            # Read the resulting status after the promotion script runs.
+                            pipe.hgetall(job_key)
+                    results = pipe.execute()
+                    break
+            except WatchError:
+                # Recheck membership and score using a fresh transaction.
+                continue
+
+        if job is not None:
+            if job.has_rate_limit and due_by is None and results[-1]:
+                job.restore(results[-1])
+            elif not job.has_rate_limit and not queue._is_async:
+                return queue.run_sync(job)
+        return job
 
     def schedule(self, job: Job, scheduled_datetime, pipeline: Pipeline | None = None):
         """
