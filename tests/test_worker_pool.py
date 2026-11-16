@@ -1,7 +1,9 @@
+import logging
 import os
 import signal
 from multiprocessing import Process
 from time import sleep
+from unittest import mock
 
 from rq.connections import get_connection_kwargs, parse_connection
 from rq.job import JobStatus
@@ -122,6 +124,76 @@ class TestWorkerPool(RQTestCase):
         run_worker('test-worker', ['foo'], connection_class, pool_class, pool_kwargs)
         # Worker should have processed the job
         self.assertEqual(len(queue), 0)
+
+    def test_stop_requested_during_worker_start_stops_new_worker(self):
+        """A stop that arrives while a worker process is starting must still reach that worker.
+
+        Regression test for https://github.com/rq/rq/issues/2590: start_worker()
+        used to register the worker in worker_dict only after process.start()
+        returned, so a SIGINT/SIGTERM handled in that window missed the new
+        worker and left it running.
+        """
+        pool = WorkerPool(['default'], connection=self.connection, num_workers=1)
+
+        fake_process = mock.MagicMock()
+        fake_process.pid = 4242
+
+        def start_and_request_stop():
+            # Simulates the signal handler running while the child is starting
+            pool.request_stop()
+
+        fake_process.start.side_effect = start_and_request_stop
+
+        with (
+            mock.patch.object(pool, 'get_worker_process', return_value=fake_process),
+            mock.patch('rq.worker_pool.os.kill') as mock_kill,
+        ):
+            pool.start_worker()
+
+        # The worker registered after the stop request must still be signaled
+        mock_kill.assert_called_once_with(4242, signal.SIGINT)
+        self.assertEqual(pool.status, pool.Status.STOPPED)
+
+    def test_run_worker_resets_inherited_pool_signal_handlers(self):
+        """run_worker() must not keep the pool's SIGINT/SIGTERM handlers in the child.
+
+        Regression test for https://github.com/rq/rq/issues/2590: before the
+        worker installs its own handlers in work(), an inherited pool handler
+        would swallow a stop signal instead of terminating the process.
+        """
+        seen = {}
+
+        class FakeWorker:
+            def __init__(self, *args, **kwargs):
+                self.log = logging.getLogger('fake-worker')
+
+            def work(self, **kwargs):
+                # work() normally installs the worker's own handlers; a worker
+                # that hasn't gotten there yet must see the defaults instead
+                seen['sigint'] = signal.getsignal(signal.SIGINT)
+                seen['sigterm'] = signal.getsignal(signal.SIGTERM)
+
+        def pool_handler(signum, frame):
+            pass
+
+        old_sigint = signal.signal(signal.SIGINT, pool_handler)
+        old_sigterm = signal.signal(signal.SIGTERM, pool_handler)
+        try:
+            run_worker(
+                'test-worker',
+                ['default'],
+                connection_class=lambda connection_pool: object(),
+                connection_pool_class=lambda **kwargs: object(),
+                connection_pool_kwargs={},
+                worker_class=FakeWorker,
+                queue_class=lambda name, connection: object(),
+            )
+        finally:
+            signal.signal(signal.SIGINT, old_sigint)
+            signal.signal(signal.SIGTERM, old_sigterm)
+
+        self.assertEqual(seen['sigint'], signal.SIG_DFL)
+        self.assertEqual(seen['sigterm'], signal.SIG_DFL)
 
     def test_worker_pool_arguments(self):
         """Ensure arguments are properly used to create the right workers"""
