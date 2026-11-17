@@ -402,6 +402,29 @@ class StartedJobRegistry(BaseRegistry):
             parse_composite_key(as_text(entry)) for entry in self.connection.zrange(self.key, start, end, desc=desc)
         ]
 
+    def get_expiration_time(self, job: Job) -> datetime | None:
+        """Returns the expiration time of the job's latest execution in this registry.
+
+        Args:
+            job (Job): The Job to get the expiration
+
+        Returns:
+            datetime (Optional[datetime]): The expiration time, or None if the job never expires
+                or has no executions in this registry
+        """
+        from .executions import Execution
+
+        # Entries are {job_id}:{execution_id}, so look up each of the job's executions
+        with self.connection.pipeline() as pipeline:
+            for execution_id in job.execution_registry.get_execution_ids():
+                execution = Execution(id=execution_id, job_id=job.id, connection=self.connection)
+                pipeline.zscore(self.key, execution.composite_key)
+            scores = [score for score in pipeline.execute() if score is not None]
+
+        if not scores or max(scores) == float('inf'):
+            return None
+        return datetime.fromtimestamp(max(scores), timezone.utc)
+
     def __contains__(self, item: Any) -> bool:
         """Method to check if the item is in the registry.
 

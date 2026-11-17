@@ -1,5 +1,5 @@
 import math
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from unittest import mock
 from unittest.mock import ANY
 
@@ -818,6 +818,29 @@ class TestStartedJobRegistry(RQTestCase):
         self.assertNotIn((job.id, execution_2.id), self.registry.get_job_and_execution_ids())
 
         job.delete()
+
+    def test_get_expiration_time(self):
+        """get_expiration_time() looks up the job's executions in the registry"""
+        worker = Worker([self.queue], connection=self.connection)
+        job = self.queue.enqueue(say_hello)
+        self.assertIsNone(self.registry.get_expiration_time(job))
+
+        execution = worker.prepare_execution(job)
+        score = self.connection.zscore(self.registry.key, execution.composite_key)
+        self.assertEqual(self.registry.get_expiration_time(job), datetime.fromtimestamp(score, timezone.utc))
+
+        # With several executions, the latest expiration wins
+        with self.connection.pipeline() as pipe:
+            self.registry.add_execution(execution, pipeline=pipe, ttl=1000)
+            pipe.execute()
+        worker.prepare_execution(job)
+        score = self.connection.zscore(self.registry.key, execution.composite_key)
+        self.assertEqual(self.registry.get_expiration_time(job), datetime.fromtimestamp(score, timezone.utc))
+
+        with self.connection.pipeline() as pipe:
+            self.registry.add_execution(execution, pipeline=pipe, ttl=-1)
+            pipe.execute()
+        self.assertIsNone(self.registry.get_expiration_time(job))
 
     def test_job_execution(self):
         """Job is removed from StartedJobRegistry after execution."""
