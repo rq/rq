@@ -842,6 +842,22 @@ class TestStartedJobRegistry(RQTestCase):
             pipe.execute()
         self.assertIsNone(self.registry.get_expiration_time(job))
 
+        # An execution past its expiration that the registry hasn't cleaned up yet still reports
+        # its expiration time, like the other registries do, even once the job's execution
+        # registry has dropped it
+        self.connection.delete(self.registry.key)
+        execution = worker.prepare_execution(job)
+        expired = current_timestamp() - 10
+        self.connection.zadd(self.registry.key, {execution.composite_key: expired})
+        job.execution_registry.cleanup(timestamp=current_timestamp() + 10_000)
+        self.assertEqual(job.execution_registry.get_execution_ids(), [])
+        self.assertEqual(self.registry.get_expiration_time(job), datetime.fromtimestamp(expired, timezone.utc))
+
+        # Executions of a job whose ID starts the same way are not mixed in
+        other = self.queue.enqueue(say_hello, job_id=job.id + '-other')
+        worker.prepare_execution(other)
+        self.assertEqual(self.registry.get_expiration_time(job), datetime.fromtimestamp(expired, timezone.utc))
+
     def test_job_execution(self):
         """Job is removed from StartedJobRegistry after execution."""
         worker = Worker([self.queue], connection=self.connection)
