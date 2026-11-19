@@ -8,6 +8,7 @@ from rq.job import Job, Retry
 from rq.queue import Queue
 from rq.registry import StartedJobRegistry
 from rq.results import Result
+from rq.serializers import JSONSerializer
 from rq.utils import now
 from rq.worker import Worker
 from tests import RQTestCase, min_redis_version
@@ -17,6 +18,31 @@ from .fixtures import div_by_zero, say_hello
 
 @min_redis_version((5, 0, 0))
 class TestResult(RQTestCase):
+    def test_all_uses_job_serializer_by_default(self):
+        """Result.all() defaults to the serializer configured on the Job.
+
+        Regression test for https://github.com/rq/rq/issues/2594: the
+        classmethod used to resolve serializer=None to the default pickle
+        serializer even when the job used JSONSerializer.
+        """
+        queue = Queue(connection=self.connection, serializer=JSONSerializer)
+        job = queue.enqueue(say_hello, 'Mo')
+        Result.create(job, Result.Type.SUCCESSFUL, ttl=10, return_value='hello')
+
+        results = Result.all(job)
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].return_value, 'hello')
+
+    def test_fetch_latest_uses_job_serializer_by_default(self):
+        """Result.fetch_latest() defaults to the serializer configured on the Job."""
+        queue = Queue(connection=self.connection, serializer=JSONSerializer)
+        job = queue.enqueue(say_hello, 'Mo')
+        Result.create(job, Result.Type.SUCCESSFUL, ttl=10, return_value='hello')
+
+        latest = Result.fetch_latest(job)
+        self.assertIsNotNone(latest)
+        self.assertEqual(latest.return_value, 'hello')
+
     def test_save_and_get_result(self):
         """Ensure data is saved properly"""
         queue = Queue(connection=self.connection)

@@ -8,6 +8,7 @@ from rq import Queue, SimpleWorker, Worker
 from rq.exceptions import NoSuchGroupError
 from rq.group import Group
 from rq.job import Job
+from rq.serializers import JSONSerializer
 from rq.utils import as_text
 from tests import RQTestCase
 from tests.fixtures import say_hello
@@ -16,6 +17,23 @@ from tests.fixtures import say_hello
 class TestGroup(RQTestCase):
     job_1_data = Queue.prepare_data(say_hello, job_id='job1')
     job_2_data = Queue.prepare_data(say_hello, job_id='job2')
+
+    def test_get_jobs_uses_group_serializer(self):
+        """Group.get_jobs() fetches jobs with the serializer configured on the Group.
+
+        Regression test for https://github.com/rq/rq/issues/2594: get_jobs()
+        used to call Job.fetch_many() without a serializer, so jobs enqueued
+        with JSONSerializer failed to deserialize on read.
+        """
+        queue = Queue(connection=self.connection, serializer=JSONSerializer)
+        group = Group.create(connection=self.connection, serializer=JSONSerializer)
+        job_data = Queue.prepare_data(say_hello, args=('Mo',))
+        jobs = group.enqueue_many(queue, [job_data])
+
+        fetched = group.get_jobs()
+        self.assertEqual(len(fetched), 1)
+        self.assertEqual(fetched[0].id, jobs[0].id)
+        self.assertEqual(fetched[0].func_name, 'tests.fixtures.say_hello')
 
     def test_create_group(self):
         q = Queue(connection=self.connection)

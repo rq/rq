@@ -11,6 +11,7 @@ from .defaults import RQ_KEY_PREFIX
 from .exceptions import NoSuchGroupError
 from .job import Job
 from .queue import EnqueueData
+from .serializers import resolve_serializer
 from .utils import as_text, missing_keys
 
 
@@ -21,9 +22,10 @@ class Group:
     REDIS_GROUP_KEY = RQ_KEY_PREFIX + ':groups'
     REDIS_GROUP_CLEANING_KEY = RQ_KEY_PREFIX + ':clean_groups'
 
-    def __init__(self, connection: Redis, name: str | None = None):
+    def __init__(self, connection: Redis, name: str | None = None, serializer=None):
         self.name = name if name else str(uuid4().hex)
         self.connection = connection
+        self.serializer = resolve_serializer(serializer)
         self.key = f'{self.REDIS_GROUP_NAME_PREFIX}{self.name}'
 
     def __repr__(self):
@@ -59,7 +61,7 @@ class Group:
         """Retrieve list of job IDs from the group key in Redis"""
         self.cleanup()
         job_ids = [as_text(job) for job in self.connection.smembers(self.key)]
-        return [job for job in Job.fetch_many(job_ids, self.connection) if job is not None]
+        return [job for job in Job.fetch_many(job_ids, self.connection, serializer=self.serializer) if job is not None]
 
     def delete_job(self, job_id: str, pipeline: Pipeline | None = None):
         pipe = pipeline if pipeline else self.connection.pipeline()
@@ -68,13 +70,13 @@ class Group:
             pipe.execute()
 
     @classmethod
-    def create(cls, connection: Redis, name: str | None = None):
-        return cls(name=name, connection=connection)
+    def create(cls, connection: Redis, name: str | None = None, serializer=None):
+        return cls(name=name, connection=connection, serializer=serializer)
 
     @classmethod
-    def fetch(cls, name: str, connection: Redis):
+    def fetch(cls, name: str, connection: Redis, serializer=None):
         """Fetch an existing group from Redis"""
-        group = cls(name=name, connection=connection)
+        group = cls(name=name, connection=connection, serializer=serializer)
         if not connection.exists(Group.get_key(group.name)):
             raise NoSuchGroupError
         return group
