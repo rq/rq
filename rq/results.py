@@ -226,6 +226,7 @@ class Result:
             job_id,
             Result.Type(int(payload['type'])),
             connection=connection,
+            serializer=serializer,
             id=result_id,
             created_at=created_at,
             return_value=return_value,

@@ -32,6 +32,7 @@ class TestResult(RQTestCase):
         results = Result.all(job)
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0].return_value, 'hello')
+        self.assertIs(results[0].serializer, JSONSerializer)
 
     def test_fetch_latest_uses_job_serializer_by_default(self):
         """Result.fetch_latest() defaults to the serializer configured on the Job."""
@@ -42,6 +43,7 @@ class TestResult(RQTestCase):
         latest = Result.fetch_latest(job)
         self.assertIsNotNone(latest)
         self.assertEqual(latest.return_value, 'hello')
+        self.assertIs(latest.serializer, JSONSerializer)
 
     def test_save_and_get_result(self):
         """Ensure data is saved properly"""
