@@ -1013,10 +1013,7 @@ class BaseWorker:
             qnames = self.queue_names()
             self.log.info('*** Listening on %s...', green(', '.join(qnames)))
         except BaseException:
-            try:
-                self.unsubscribe()
-            except Exception:
-                self.log.exception('Worker %s: failed to clean up subscription after startup failure', self.name)
+            self.unsubscribe()
             raise
 
     def check_for_suspension(self, burst: bool):
@@ -1140,7 +1137,9 @@ class BaseWorker:
 
     def unsubscribe(self):
         """Unsubscribe from pubsub channel"""
-        if self.pubsub is not None:
+        if self.pubsub is None:
+            return
+        try:
             try:
                 if self.pubsub_thread:
                     self.log.info('Worker %s: unsubscribing from channel %s', self.name, self.pubsub_channel_name)
@@ -1151,6 +1150,8 @@ class BaseWorker:
                         self.pubsub_thread.join(timeout=1)
             finally:
                 self.pubsub.close()
+        except Exception:
+            self.log.exception('Worker %s: failed to clean up subscription', self.name)
 
     def dequeue_job_and_maintain_ttl(
         self, timeout: int | None, max_idle_time: int | None = None

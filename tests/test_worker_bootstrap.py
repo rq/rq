@@ -60,23 +60,48 @@ class TestWorkerBootstrap(unittest.TestCase):
                 self.assertIs(exc_info.exception, error)
                 pubsub.close.assert_called_once()
 
-    def test_bootstrap_preserves_startup_error_when_unsubscribe_fails(self):
-        """An unsubscribe failure does not hide the startup error or skip cleanup."""
-        worker = Worker('default', connection=Redis(), prepare_for_work=False)
-        pubsub = Mock()
-        pubsub.unsubscribe.side_effect = ConnectionError('unsubscribe failed')
-        error = ConnectionError('startup failed')
-        with (
-            patch.object(worker, 'register_birth'),
-            patch.object(worker.connection, 'pubsub', return_value=pubsub),
-            patch.object(worker, 'set_state', side_effect=error),
-        ):
-            with self.assertRaises(ConnectionError) as exc_info:
-                worker.bootstrap()
-        self.assertIs(exc_info.exception, error)
-        pubsub.run_in_thread.return_value.stop.assert_called_once()
-        pubsub.run_in_thread.return_value.join.assert_called_once_with(timeout=1)
-        pubsub.close.assert_called_once()
+    def test_bootstrap_preserves_startup_error_when_cleanup_fails(self):
+        """A cleanup error does not hide the startup error or skip resource cleanup."""
+        for failure_point in ('unsubscribe', 'close'):
+            with self.subTest(failure_point=failure_point):
+                worker = Worker('default', connection=Redis(), prepare_for_work=False)
+                pubsub = Mock()
+                cleanup_error = ConnectionError(f'{failure_point} failed')
+                getattr(pubsub, failure_point).side_effect = cleanup_error
+                startup_error = ConnectionError('startup failed')
+                with (
+                    patch.object(worker, 'register_birth'),
+                    patch.object(worker.connection, 'pubsub', return_value=pubsub),
+                    patch.object(worker, 'set_state', side_effect=startup_error),
+                    self.assertLogs(worker.log.name, level='ERROR') as logs,
+                ):
+                    with self.assertRaises(ConnectionError) as exc_info:
+                        worker.bootstrap()
+                self.assertIs(exc_info.exception, startup_error)
+                self.assertIs(logs.records[0].exc_info[1], cleanup_error)
+                pubsub.run_in_thread.return_value.stop.assert_called_once()
+                pubsub.run_in_thread.return_value.join.assert_called_once_with(timeout=1)
+                pubsub.close.assert_called_once()
+
+    def test_cleanup_logs_and_suppresses_pubsub_errors(self):
+        """Direct unsubscribe and normal teardown both handle cleanup errors."""
+        for method in ('unsubscribe', 'teardown'):
+            for failure_point in ('unsubscribe', 'close'):
+                with self.subTest(method=method, failure_point=failure_point):
+                    worker = Worker('default', connection=Redis(), prepare_for_work=False)
+                    worker.pubsub = Mock()
+                    worker.pubsub_thread = Mock()
+                    error = ConnectionError(f'{failure_point} failed')
+                    getattr(worker.pubsub, failure_point).side_effect = error
+                    with (
+                        patch.object(worker, 'register_death'),
+                        self.assertLogs(worker.log.name, level='ERROR') as logs,
+                    ):
+                        getattr(worker, method)()
+                    self.assertIs(logs.records[0].exc_info[1], error)
+                    worker.pubsub_thread.stop.assert_called_once()
+                    worker.pubsub_thread.join.assert_called_once_with(timeout=1)
+                    worker.pubsub.close.assert_called_once()
 
     def test_successful_bootstrap_keeps_subscription_open(self):
         """A successful startup keeps the subscription open until unsubscribed."""
@@ -91,4 +116,7 @@ class TestWorkerBootstrap(unittest.TestCase):
         pubsub.close.assert_not_called()
         pubsub.run_in_thread.return_value.stop.assert_not_called()
         worker.unsubscribe()
+        pubsub.unsubscribe.assert_called_once_with()
+        pubsub.run_in_thread.return_value.stop.assert_called_once()
+        pubsub.run_in_thread.return_value.join.assert_called_once_with(timeout=1)
         pubsub.close.assert_called_once()
