@@ -1012,10 +1012,14 @@ class BaseWorker:
         setup_loghandlers(logging_level, date_format, log_format, name='rq.job')
         self.register_birth()
         self.log.info('Worker %s: started with PID %d, version %s', self.name, os.getpid(), VERSION)
-        self.subscribe()
-        self.set_state(WorkerStatus.STARTED)
-        qnames = self.queue_names()
-        self.log.info('*** Listening on %s...', green(', '.join(qnames)))
+        try:
+            self.subscribe()
+            self.set_state(WorkerStatus.STARTED)
+            qnames = self.queue_names()
+            self.log.info('*** Listening on %s...', green(', '.join(qnames)))
+        except BaseException:
+            self.unsubscribe()
+            raise
 
     def check_for_suspension(self, burst: bool):
         """Check to see if workers have been suspended by `rq suspend`"""
@@ -1138,12 +1142,21 @@ class BaseWorker:
 
     def unsubscribe(self):
         """Unsubscribe from pubsub channel"""
-        if self.pubsub_thread:
-            self.log.info('Worker %s: unsubscribing from channel %s', self.name, self.pubsub_channel_name)
-            self.pubsub.unsubscribe()
-            self.pubsub_thread.stop()
-            self.pubsub_thread.join(timeout=1)
-            self.pubsub.close()
+        if self.pubsub is None:
+            return
+        try:
+            try:
+                if self.pubsub_thread:
+                    self.log.info('Worker %s: unsubscribing from channel %s', self.name, self.pubsub_channel_name)
+                    try:
+                        self.pubsub.unsubscribe()
+                    finally:
+                        self.pubsub_thread.stop()
+                        self.pubsub_thread.join(timeout=1)
+            finally:
+                self.pubsub.close()
+        except Exception:
+            self.log.exception('Worker %s: failed to clean up subscription', self.name)
 
     def dequeue_job_and_maintain_ttl(
         self, timeout: int | None, max_idle_time: int | None = None
