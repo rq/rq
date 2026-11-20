@@ -869,6 +869,83 @@ class TestWorker(RQTestCase):
 
         self.assertEqual(q.count, 0)
 
+    def test_max_idle_time_during_redis_retries(self):
+        for error in (redis.exceptions.ConnectionError, redis.exceptions.TimeoutError):
+            for request_duration in (0.25, 3.5):
+                with self.subTest(error=error, request_duration=request_duration):
+                    worker = Worker([Queue(connection=self.connection)])
+                    worker.last_cleaned_at = now()
+                    started_at = now()
+                    elapsed = 0.0
+
+                    def dequeue(*args, **kwargs):
+                        nonlocal elapsed
+                        # Fail promptly on the old retry loop instead of hanging the test.
+                        self.assertLess(elapsed, 3)
+                        elapsed += request_duration
+                        raise error('Redis unavailable')
+
+                    def backoff(seconds):
+                        nonlocal elapsed
+                        elapsed += seconds
+
+                    with (
+                        mock.patch('rq.worker.base.now', side_effect=lambda: started_at + timedelta(seconds=elapsed)),
+                        mock.patch('rq.worker.base.time.sleep', side_effect=backoff) as sleep_mock,
+                        mock.patch.object(worker, 'heartbeat'),
+                        mock.patch.object(worker.queue_class, 'dequeue_any', side_effect=dequeue),
+                    ):
+                        self.assertIsNone(worker.dequeue_job_and_maintain_ttl(1, max_idle_time=3))
+
+                    # Only the Redis operation itself may run past the idle deadline.
+                    self.assertLessEqual(elapsed, max(3, request_duration))
+                    if request_duration > 3:
+                        sleep_mock.assert_not_called()
+
+    def test_max_idle_time_allows_redis_recovery(self):
+        queue = Queue(connection=self.connection)
+        job = queue.enqueue(say_hello)
+        worker = Worker([queue])
+        worker.last_cleaned_at = now()
+        started_at = now()
+        elapsed = 0.0
+
+        def backoff(seconds):
+            nonlocal elapsed
+            elapsed += seconds
+
+        with (
+            mock.patch('rq.worker.base.now', side_effect=lambda: started_at + timedelta(seconds=elapsed)),
+            mock.patch('rq.worker.base.time.sleep', side_effect=backoff),
+            mock.patch.object(worker, 'heartbeat'),
+            mock.patch.object(
+                worker.queue_class,
+                'dequeue_any',
+                side_effect=[redis.exceptions.TimeoutError(), mock.DEFAULT],
+                wraps=worker.queue_class.dequeue_any,
+            ) as dequeue,
+        ):
+            result = worker.dequeue_job_and_maintain_ttl(10, max_idle_time=3)
+        self.assertIsNotNone(result)
+        self.assertEqual(result[0].id, job.id)
+        self.assertEqual([call.args[1] for call in dequeue.call_args_list], [3, 2])
+
+    def test_redis_retries_without_max_idle_time(self):
+        worker = Worker([Queue(connection=self.connection)])
+        worker.last_cleaned_at = now()
+        with (
+            mock.patch('rq.worker.base.time.sleep') as sleep_mock,
+            mock.patch.object(worker, 'heartbeat'),
+            mock.patch.object(
+                worker.queue_class,
+                'dequeue_any',
+                side_effect=[redis.exceptions.TimeoutError(), redis.exceptions.ConnectionError(), None],
+            ) as dequeue,
+        ):
+            self.assertIsNone(worker.dequeue_job_and_maintain_ttl(1))
+        self.assertEqual(dequeue.call_count, 3)
+        self.assertEqual(sleep_mock.call_args_list, [mock.call(1.0), mock.call(2.0)])
+
     @slow
     def test_max_idle_time(self):
         q = Queue(connection=self.connection)

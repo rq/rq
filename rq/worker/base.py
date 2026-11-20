@@ -1197,21 +1197,30 @@ class BaseWorker:
 
                 break
             except DequeueTimeout:
+                pass
+            except (redis.exceptions.ConnectionError, redis.exceptions.TimeoutError) as conn_err:
+                retry_delay = connection_wait_time
                 if max_idle_time is not None:
                     idle_for = (now() - idle_since).total_seconds()
-                    idle_time_left = math.ceil(max_idle_time - idle_for)
-                    if idle_time_left <= 0:
+                    remaining = max_idle_time - idle_for
+                    if remaining <= 0:
                         break
-            except (redis.exceptions.ConnectionError, redis.exceptions.TimeoutError) as conn_err:
+                    retry_delay = min(retry_delay, remaining)
                 self.log.error(
                     'Worker %s: could not connect to Redis instance: %s retrying in %d seconds...',
                     self.name,
                     conn_err,
-                    connection_wait_time,
+                    retry_delay,
                 )
-                time.sleep(connection_wait_time)
+                time.sleep(retry_delay)
                 connection_wait_time *= self.exponential_backoff_factor
                 connection_wait_time = min(connection_wait_time, self.max_connection_wait_time)
+
+            if max_idle_time is not None:
+                idle_for = (now() - idle_since).total_seconds()
+                idle_time_left = math.ceil(max_idle_time - idle_for)
+                if idle_time_left <= 0:
+                    break
 
         self.heartbeat()
         return result
