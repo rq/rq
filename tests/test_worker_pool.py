@@ -190,3 +190,8 @@ class TestWorkerPool(RQTestCase):
             self.assertEqual(job.get_status(refresh=True), JobStatus.FINISHED)
         finally:
             pool.stop_workers()
+
+    def test_queues_use_job_class(self):
+        """Ensure WorkerPool.queues are built with the pool's job class"""
+        pool = WorkerPool(['foo'], connection=self.connection, job_class=CustomJob)
+        self.assertIs(pool.queues[0].job_class, CustomJob)

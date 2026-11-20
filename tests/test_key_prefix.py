@@ -10,7 +10,7 @@ from redis import Redis
 
 from rq import Queue
 from rq.cron_scheduler_registry import get_registry_key
-from rq.defaults import RQ_KEY_PREFIX
+from rq.defaults import RQ_KEY_PREFIX, validate_key_prefix
 from rq.results import Result
 from rq.worker_registration import REDIS_WORKER_KEYS, WORKERS_BY_QUEUE_KEY
 
@@ -54,36 +54,10 @@ class TestKeyPrefix(unittest.TestCase):
         )
 
     def test_invalid_prefix_rejected(self):
-        """Prefixes with characters unsafe in %-templates or Lua source fail at import."""
-        output = subprocess.run(
-            [sys.executable, '-c', 'import rq'],
-            env={**os.environ, 'RQ_KEY_PREFIX': 'app%s'},
-            capture_output=True,
-            text=True,
-        )
-        self.assertNotEqual(output.returncode, 0)
-        self.assertIn('Invalid RQ_KEY_PREFIX', output.stderr)
+        """Prefixes with characters unsafe in %-templates or Lua source are rejected."""
+        for prefix in ('app%s', 'team"x', 'rq\n', ''):
+            with self.assertRaisesRegex(ValueError, 'Invalid RQ_KEY_PREFIX'):
+                validate_key_prefix(prefix)
 
-        output = subprocess.run(
-            [sys.executable, '-c', 'import rq'],
-            env={**os.environ, 'RQ_KEY_PREFIX': 'team"x'},
-            capture_output=True,
-            text=True,
-        )
-        self.assertNotEqual(output.returncode, 0)
-        self.assertIn('Invalid RQ_KEY_PREFIX', output.stderr)
-
-        output = subprocess.run(
-            [sys.executable, '-c', 'import rq'],
-            env={**os.environ, 'RQ_KEY_PREFIX': 'rq\n'},
-            capture_output=True,
-            text=True,
-        )
-        self.assertNotEqual(output.returncode, 0)
-        self.assertIn('Invalid RQ_KEY_PREFIX', output.stderr)
-
-        output = subprocess.run(
-            [sys.executable, '-c', 'import rq'], env={**os.environ, 'RQ_KEY_PREFIX': ''}, capture_output=True, text=True
-        )
-        self.assertNotEqual(output.returncode, 0)
-        self.assertIn('Invalid RQ_KEY_PREFIX', output.stderr)
+        # Namespaced prefixes like `myapp/rq` are allowed
+        self.assertEqual(validate_key_prefix('myapp/rq'), 'myapp/rq')

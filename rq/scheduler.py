@@ -65,6 +65,8 @@ class RQScheduler:
         log_format=DEFAULT_LOGGING_FORMAT,
         serializer=None,
         name: str | None = None,
+        job_class: type[Job] | None = None,
+        queue_class: type[Queue] | None = None,
     ):
         self._queue_names = set(parse_names(queues))
         self._acquired_locks: set[str] = set()
@@ -72,6 +74,8 @@ class RQScheduler:
         self.lock_acquisition_time = None
         self._connection_class, self._pool_class, self._pool_kwargs = parse_connection(connection)
         self.serializer = resolve_serializer(serializer)
+        self.job_class = job_class if job_class else Job
+        self.queue_class = queue_class if queue_class else Queue
 
         # Identity, stable across the fork (name is pickled to the child process).
         self.name: str = name or uuid4().hex
@@ -160,7 +164,9 @@ class RQScheduler:
             queue_names = self._acquired_locks
         for name in queue_names:
             self._scheduled_job_registries.append(
-                ScheduledJobRegistry(name, connection=self.connection, serializer=self.serializer)
+                ScheduledJobRegistry(
+                    name, connection=self.connection, job_class=self.job_class, serializer=self.serializer
+                )
             )
 
     @classmethod
@@ -246,9 +252,11 @@ class RQScheduler:
             if not job_ids:
                 continue
 
-            queue = Queue(registry.name, connection=self.connection, serializer=self.serializer)
+            queue = self.queue_class(
+                registry.name, connection=self.connection, job_class=self.job_class, serializer=self.serializer
+            )
 
-            jobs = Job.fetch_many(job_ids, connection=self.connection, serializer=self.serializer)
+            jobs = self.job_class.fetch_many(job_ids, connection=self.connection, serializer=self.serializer)
             normal_jobs = []
             jobs_with_rate_limit = []
             missing_job_ids = []

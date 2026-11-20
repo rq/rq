@@ -20,7 +20,7 @@ from rq.serializers import JSONSerializer
 from rq.timeouts import UnixSignalDeathPenalty
 from rq.worker import Worker, WorkerStatus
 from tests import RQTestCase
-from tests.fixtures import CustomQueue, div_by_zero, say_hello
+from tests.fixtures import CustomJob, CustomQueue, div_by_zero, say_hello
 
 
 class CLITestCase(RQTestCase):
@@ -502,6 +502,21 @@ class TestRQCli(CLITestCase):
             Job(job_id, serializer=JSONSerializer, connection=self.connection).result, 'Hi there, Stranger!'
         )
 
+    def test_cli_enqueue_with_job_class(self):
+        """rq enqueue -u <url> --job-class tests.fixtures.CustomJob tests.fixtures.say_hello"""
+        runner = CliRunner()
+        args = ['enqueue', '-u', self.redis_url, '--job-class', 'tests.fixtures.CustomJob', '--job-id', 'custom']
+        with patch.object(CustomJob, 'redis_job_namespace_prefix', 'custom:job:'):
+            result = runner.invoke(main, [*args, 'tests.fixtures.say_hello'])
+            self.assert_normal_execution(result)
+            self.assertTrue(self.connection.exists('custom:job:custom'))
+            self.assertFalse(self.connection.exists('rq:job:custom'))
+
+            queue = Queue(connection=self.connection, job_class=CustomJob)
+            worker = Worker(queue, connection=self.connection, job_class=CustomJob)
+            worker.work(burst=True)
+            self.assertEqual(CustomJob.fetch('custom', connection=self.connection).result, 'Hi there, Stranger!')
+
     def test_cli_enqueue_args(self):
         """rq enqueue -u <url> tests.fixtures.echo hello ':[1, {"key": "value"}]' json:=["abc"] nojson=def"""
         queue = Queue(connection=self.connection)
@@ -618,6 +633,22 @@ class TestRQCli(CLITestCase):
         self.assertEqual(len(registry), 1)
 
         self.assertFalse(worker.work(True))
+
+    def test_cli_enqueue_schedule_at_front(self):
+        """rq enqueue --at-front --schedule-at puts the job at the front of the queue when it is due"""
+        queue = Queue(connection=self.connection)
+        queued_job = queue.enqueue(say_hello)
+
+        runner = CliRunner()
+        for job_id, options in (('at-front', ['--at-front']), ('at-back', [])):
+            args = ['enqueue', '-u', self.redis_url, '--job-id', job_id, '--schedule-at', '2021-01-01T00:00:00']
+            result = runner.invoke(main, [*args, *options, 'tests.fixtures.say_hello'])
+            self.assert_normal_execution(result)
+
+        scheduler = RQScheduler(queue, self.connection)
+        scheduler.acquire_locks()
+        scheduler.enqueue_scheduled_jobs()
+        self.assertEqual(queue.get_job_ids(), ['at-front', queued_job.id, 'at-back'])
 
     def test_cli_enqueue_retry(self):
         """rq enqueue -u <url> tests.fixtures.say_hello --retry-max 3 --retry-interval 10 --retry-interval 20

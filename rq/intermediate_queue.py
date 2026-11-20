@@ -23,7 +23,7 @@ class IntermediateQueue:
         """Returns the intermediate queue key for a given queue key.
 
         Args:
-            key (str): The queue key
+            queue_key (str): The queue key
 
         Returns:
             str: The intermediate queue key
@@ -46,7 +46,6 @@ class IntermediateQueue:
 
         Args:
             job_id (str): The job ID
-            timestamp (float): The timestamp
         """
         # TODO: job_id should be changed to execution ID in 2.0
         return bool(self.connection.set(self.get_first_seen_key(job_id), now().timestamp(), nx=True, ex=3600 * 24))

@@ -168,6 +168,8 @@ class Result:
     @classmethod
     def all(cls, job: Job, serializer=None):
         """Returns all results for job"""
+        if serializer is None:
+            serializer = job.serializer
         # response = job.connection.zrange(cls.get_key(job.id), 0, 10, desc=True, withscores=True)
         response = job.connection.xrevrange(cls.get_key(job.id), '+', '-')
         results = []
@@ -224,12 +226,12 @@ class Result:
             job_id,
             Result.Type(int(payload['type'])),
             connection=connection,
+            serializer=serializer,
             id=result_id,
             created_at=created_at,
             return_value=return_value,
             exc_string=exc_string,
             worker_name=worker_name,
-            serializer=serializer,
             execution_id=execution_id,
             execution_started_at=execution_started_at,
             execution_ended_at=execution_ended_at,
@@ -253,8 +255,10 @@ class Result:
 
         If a non-zero timeout is provided, block for a result until timeout is reached.
         """
+        if serializer is None:
+            serializer = job.serializer
         if timeout:
-            # Unlike blpop, xread timeout is in miliseconds. "0-0" is the special value for the
+            # Unlike blpop, xread timeout is in milliseconds. "0-0" is the special value for the
             # first item in the stream, like '-' for xrevrange.
             timeout_ms = timeout * 1000
             response = job.connection.xread({cls.get_key(job.id): '0-0'}, block=timeout_ms)

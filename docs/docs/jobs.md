@@ -329,7 +329,7 @@ job = q.enqueue(count_words_at_url,
 
 ## Job Position in Queue
 
-For user feedback or debuging it is possible to get the position of a job
+For user feedback or debugging it is possible to get the position of a job
 within the work queue. This allows to track the job processing through the
 queue.
 

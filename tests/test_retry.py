@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from rq import Queue
 from rq.executions import prepare_execution
 from rq.job import Job, JobStatus, Retry
-from rq.registry import FailedJobRegistry, StartedJobRegistry
+from rq.registry import FailedJobRegistry, ScheduledJobRegistry, StartedJobRegistry
 from rq.results import Result
 from rq.scheduler import RQScheduler
 from rq.worker import Worker
@@ -12,8 +12,8 @@ from tests import RQTestCase, slow
 from tests.fixtures import div_by_zero, say_hello
 
 
-def return_retry(max: int = 1, interval: int = 0):
-    return Retry(max=max, interval=interval)
+def return_retry(max: int = 1, interval: int = 0, enqueue_at_front: bool = False):
+    return Retry(max=max, interval=interval, enqueue_at_front=enqueue_at_front)
 
 
 class TestRetry(RQTestCase):
@@ -435,6 +435,27 @@ class TestWorkerRetry(RQTestCase):
         worker.work(max_jobs=1)
 
         # job1 should be retried and enqueued at the front of the queue
+        self.assertEqual(queue.job_ids, [job1.id, job2.id])
+
+    def test_worker_handles_enqueue_at_front_on_returned_retry(self):
+        """A job that returns Retry(enqueue_at_front=True) is retried at the front of the queue"""
+        queue = Queue(connection=self.connection)
+        worker = Worker([queue], connection=self.connection)
+        job1 = queue.enqueue(return_retry, enqueue_at_front=True)
+        job2 = queue.enqueue(say_hello)
+        worker.work(max_jobs=1)
+        self.assertEqual(queue.job_ids, [job1.id, job2.id])
+
+        # With an interval, the scheduler puts the retry at the front
+        queue.empty()
+        job1 = queue.enqueue(return_retry, interval=10, enqueue_at_front=True)
+        job2 = queue.enqueue(say_hello)
+        worker.work(max_jobs=1)
+        self.assertEqual(job1.get_status(), JobStatus.SCHEDULED)
+        ScheduledJobRegistry(queue=queue).schedule(job1, datetime(2019, 1, 1, tzinfo=timezone.utc))
+        scheduler = RQScheduler([queue], connection=self.connection)
+        scheduler.acquire_locks()
+        scheduler.enqueue_scheduled_jobs()
         self.assertEqual(queue.job_ids, [job1.id, job2.id])
 
     @slow

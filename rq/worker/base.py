@@ -249,6 +249,7 @@ class BaseWorker:
             self.push_exc_handler(exception_handlers)
 
     def _set_ip_address(self, connection: Redis) -> None:
+        """Set the worker's IP address from CLIENT INFO, falling back to CLIENT LIST."""
         try:
             connection.client_setname(self.name)
         except redis.exceptions.ResponseError:
@@ -258,11 +259,13 @@ class BaseWorker:
 
         try:
             self.ip_address = str(connection.client_info()['addr'])
-        except redis.exceptions.ResponseError:
-            # CLIENT INFO needs Redis 6.2. CLIENT LIST works on older servers but returns every connection.
+        except (redis.exceptions.ResponseError, KeyError):
+            # CLIENT INFO needs Redis 6.2, and redis-py < 6.3 fails to parse replies that omit
+            # integer fields (seen with Redis Enterprise). CLIENT LIST works in both cases.
             self.ip_address = self._ip_address_from_client_list(connection)
 
     def _ip_address_from_client_list(self, connection: Redis) -> str:
+        """Get this worker's own address from CLIENT LIST, or 'unknown' when unsupported."""
         try:
             client_addresses = [
                 client['addr'] for client in connection.client_list() if client.get('name') == self.name
@@ -925,6 +928,8 @@ class BaseWorker:
             date_format=date_format,
             log_format=log_format,
             serializer=self.serializer,
+            job_class=self.job_class,
+            queue_class=self.queue_class,
         )
         self.scheduler.acquire_locks()
         if self.scheduler.acquired_locks:
@@ -1110,7 +1115,7 @@ class BaseWorker:
         )
 
     def get_heartbeat_ttl(self, job: Job, working_time: float = 0.0) -> int:
-        """Get's the TTL for the next heartbeat.
+        """Gets the TTL for the next heartbeat.
 
         Args:
             job (Job): The Job
@@ -1683,7 +1688,7 @@ class BaseWorker:
         After fork()'ing, always assure we are generating random sequences
         that are different from the worker.
 
-        os._exit() is the way to exit from childs after a fork(), in
+        os._exit() is the way to exit from child processes after a fork(), in
         contrast to the regular sys.exit()
         """
         random.seed()

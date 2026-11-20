@@ -137,6 +137,10 @@ class SyncJobCallback(RQTestCase):
         self.assertEqual(job.get_status(), JobStatus.FAILED)
         self.assertFalse(self.connection.exists(f'success_callback:{job.id}'))
 
+        # the callback still gets the return value when result_ttl=0 discards it
+        job = queue.enqueue(say_hello, on_success=save_result, result_ttl=0)
+        self.assertEqual(self.connection.get(f'success_callback:{job.id}').decode(), 'Hi there, Stranger!')
+
         # test string callbacks
         job = queue.enqueue(say_hello, on_success=Callback('tests.fixtures.save_result'))
         self.assertEqual(job.get_status(), JobStatus.FINISHED)

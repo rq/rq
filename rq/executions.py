@@ -132,7 +132,9 @@ class Execution:
         """Update execution heartbeat."""
         # TODO: worker heartbeat should be tied to execution heartbeat
         self.last_heartbeat = now()
-        pipeline.hset(self.key, 'last_heartbeat', self.last_heartbeat.timestamp())
+        # Write every field, not only last_heartbeat. If the hash expired while the execution is
+        # still running, this recreates a complete record that Execution.fetch() can read.
+        pipeline.hset(self.key, mapping=self.serialize())
         pipeline.expire(self.key, ttl)
         started_job_registry.add_execution(self, ttl=ttl, pipeline=pipeline, xx=True)
         ExecutionRegistry(job_id=self.job_id, connection=pipeline).add(
@@ -199,9 +201,15 @@ class ExecutionRegistry(BaseRegistry):
         return executions
 
     def delete(self, job: Job, pipeline: Pipeline):
-        """Delete the registry."""
-        executions = self.get_executions()
-        for execution in executions:
+        """Delete the registry and its executions.
+
+        An execution hash can expire before its registry entry, or be recreated by a late
+        heartbeat without all of its fields. Deletion must not depend on reading it, so only
+        worker_name is read, and only to clean up the worker's execution index.
+        """
+        for execution_id in self.get_execution_ids():
+            execution = Execution(id=execution_id, job_id=self.job_id, connection=self.connection)
+            execution.worker_name = as_text(self.connection.hget(execution.key, 'worker_name') or b'')
             execution.delete(pipeline=pipeline, job=job)
         pipeline.delete(self.key)
 
