@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 from rq import Queue, Retry
 from rq.exceptions import DuplicateJobError
-from rq.job import Job, JobStatus
+from rq.job import Job, JobStatus, zstd
 from rq.registry import (
     CanceledJobRegistry,
     DeferredJobRegistry,
@@ -43,6 +43,20 @@ class TestQueue(RQTestCase):
         self.assertEqual(q.name, 'my-queue')
         self.assertEqual(str(q), '<Queue my-queue>')
 
+
+    def test_create_queue_with_zstd(self):
+        """Jobs created through a queue use Zstandard when enabled."""
+        if zstd is None:
+            self.skipTest('Zstandard is not available')
+
+        queue = Queue('zstd-queue', connection=self.connection, use_zstd=True)
+        job = queue.create_job(echo, args=('hello',))
+
+        job.save()
+
+        compressed_data = self.connection.hget(job.key, 'data')
+        self.assertEqual(zstd.decompress(compressed_data), job.data)
+
     def test_create_queue_with_serializer(self):
         """Creating queues with serializer."""
         q = Queue('queue-with-serializer', connection=self.connection, serializer=json)
@@ -50,6 +64,8 @@ class TestQueue(RQTestCase):
 
         q = Queue('queue-with-serializer', connection=self.connection, serializer='json')
         self.assertIs(q.serializer, JSONSerializer)
+
+
 
     def test_create_default_queue(self):
         """Instantiating the default queue."""
