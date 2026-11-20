@@ -192,12 +192,13 @@ class BaseRegistry:
 
         Returns:
             datetime (Optional[datetime]): The expiration time, or None if the job never expires
+                or is not in this registry
         """
         score = self.connection.zscore(self.key, job.id)
         # A TTL of -1 is stored as +inf, or as -1 in FailedJobRegistry
-        if score is not None and (score < 0 or score == float('inf')):
+        if score is None or score < 0 or score == float('inf'):
             return None
-        return datetime.fromtimestamp(score, timezone.utc)  # type: ignore[arg-type]
+        return datetime.fromtimestamp(score, timezone.utc)
 
     def requeue(self, job_or_id: Job | str, at_front: bool = False) -> Job:
         """Requeues the job with the given job ID.

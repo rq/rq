@@ -93,6 +93,16 @@ class TestRegistry(RQTestCase):
         failed_job_registry.add(job, ttl=-1)
         self.assertIsNone(failed_job_registry.get_expiration_time(job))
 
+    def test_get_expiration_time_job_not_in_registry(self):
+        """registry.get_expiration_time() returns None for jobs that are not in the registry"""
+        queue = Queue(connection=self.connection)
+        job = queue.enqueue(say_hello)
+        self.assertIsNone(self.registry.get_expiration_time(job))
+
+        self.registry.add(job, 5)
+        self.registry.remove(job)
+        self.assertIsNone(self.registry.get_expiration_time(job))
+
     def test_add_and_remove(self):
         """Adding and removing job from BaseRegistry."""
         timestamp = current_timestamp()
