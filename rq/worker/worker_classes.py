@@ -195,6 +195,7 @@ class SpawnWorker(Worker):
                 )
         # Reject unpicklable configuration before registering or dequeuing work.
         self._dump_worker_config()
+        self._dump_connection_kwargs()
         super().bootstrap(logging_level, date_format, log_format)
 
     def _dump_worker_config(self) -> bytes:
@@ -216,12 +217,8 @@ class SpawnWorker(Worker):
             )
         )
 
-    def fork_work_horse(self, job: Job, queue: Queue):
-        """Spawns a work horse to perform the actual work using `os.posix_spawn()`."""
-        os.environ['RQ_WORKER_ID'] = self.name
-        os.environ['RQ_JOB_ID'] = job.id
-        os.environ['RQ_EXECUTION_ID'] = self.execution.id  # type: ignore
-
+    def _dump_connection_kwargs(self) -> bytes:
+        """Serialize the kwargs the horse uses to rebuild this worker's Redis connection."""
         redis_kwargs = get_connection_kwargs(self.connection)
         if 'path' in redis_kwargs:
             redis_kwargs['unix_socket_path'] = redis_kwargs.pop('path')
@@ -233,7 +230,15 @@ class SpawnWorker(Worker):
             del redis_kwargs['retry']
         if redis_kwargs.get('driver_info'):
             del redis_kwargs['driver_info']
+        return pickle.dumps(redis_kwargs)
 
+    def fork_work_horse(self, job: Job, queue: Queue):
+        """Spawns a work horse to perform the actual work using `os.posix_spawn()`."""
+        os.environ['RQ_WORKER_ID'] = self.name
+        os.environ['RQ_JOB_ID'] = job.id
+        os.environ['RQ_EXECUTION_ID'] = self.execution.id  # type: ignore
+
+        connection_kwargs_payload = self._dump_connection_kwargs()
         worker_config_payload = self._dump_worker_config()
         child_source = f"""
 import os
@@ -248,7 +253,7 @@ from rq.executions import Execution
 worker_class, worker_attributes = pickle.loads({worker_config_payload!r})
 
 # Recreate worker instance
-redis = Redis(**{redis_kwargs!r})
+redis = Redis(**pickle.loads({connection_kwargs_payload!r}))
 worker = worker_class.find_by_key(
     {self.key!r},
     connection=redis,
