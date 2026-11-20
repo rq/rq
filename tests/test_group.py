@@ -30,7 +30,8 @@ class TestGroup(RQTestCase):
         group = Group.create(connection=self.connection)
         for job_datas in ([], iter(())):
             with self.subTest(job_datas=job_datas):
-                assert group.enqueue_many(q, job_datas) == []
+                with self.assertRaisesRegex(ValueError, 'Cannot enqueue an empty batch of jobs'):
+                    group.enqueue_many(q, job_datas)
                 assert q.count == 0
                 assert not self.connection.exists(group.key)
                 assert not self.connection.sismember(Group.REDIS_GROUP_KEY, group.name)
@@ -39,7 +40,8 @@ class TestGroup(RQTestCase):
         q = Queue(connection=self.connection)
         group = Group.create(connection=self.connection)
         jobs = group.enqueue_many(q, [self.job_1_data])
-        assert group.enqueue_many(q, []) == []
+        with self.assertRaisesRegex(ValueError, 'Cannot enqueue an empty batch of jobs'):
+            group.enqueue_many(q, [])
         self.assertCountEqual(group.get_jobs(), jobs)
         assert self.connection.sismember(Group.REDIS_GROUP_KEY, group.name)
         assert q.count == 1
@@ -49,7 +51,8 @@ class TestGroup(RQTestCase):
         group = Group.create(connection=self.connection)
         with self.connection.pipeline() as pipe:
             pipe.set('caller-command', 'pending')
-            assert group.enqueue_many(q, iter(()), pipeline=pipe) == []
+            with self.assertRaisesRegex(ValueError, 'Cannot enqueue an empty batch of jobs'):
+                group.enqueue_many(q, iter(()), pipeline=pipe)
             assert not self.connection.exists('caller-command')
             pipe.execute()
         assert self.connection.get('caller-command') == b'pending'

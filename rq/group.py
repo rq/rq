@@ -48,7 +48,7 @@ class Group:
 
         jobs = queue.enqueue_many(job_datas, group_id=self.name, pipeline=pipe)
         if not jobs:
-            return jobs
+            raise ValueError('Cannot enqueue an empty batch of jobs')
 
         self._add_jobs(jobs, pipeline=pipe)
 
