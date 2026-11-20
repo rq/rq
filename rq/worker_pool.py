@@ -82,7 +82,10 @@ class WorkerPool:
     @property
     def queues(self) -> list[Queue]:
         """Returns a list of Queue objects"""
-        return [self.queue_class(name, connection=self.connection) for name in self._queue_names]
+        return [
+            self.queue_class(name, connection=self.connection, job_class=self.job_class, serializer=self.serializer)
+            for name in self._queue_names
+        ]
 
     @property
     def number_of_active_workers(self) -> int:
@@ -272,7 +275,9 @@ def run_worker(
     connection = connection_class(
         connection_pool=ConnectionPool(connection_class=connection_pool_class, **connection_pool_kwargs)
     )
-    queues = [queue_class(name, connection=connection) for name in queue_names]
+    queues = [
+        queue_class(name, connection=connection, job_class=job_class, serializer=serializer) for name in queue_names
+    ]
     worker = worker_class(
         queues,
         name=worker_name,
