@@ -40,7 +40,7 @@ jobs:
           echo Building with tags: $VERSIONS
 
           # Login to registries
-          echo "${{ secrets.GITHUB_TOKEN }}" | docker login docker.pkg.github.com -u ${{ github.actor }} --password-stdin
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
           echo "${{ secrets.DOCKER_TOKEN }}" | docker login -u selwin --password-stdin
 
           # Build image
@@ -50,6 +50,6 @@ jobs:
           for VERSION in $VERSIONS
             do docker tag worker redisqueue/worker:$VERSION
                docker push redisqueue/worker:$VERSION
-               docker tag worker docker.pkg.github.com/rq/rq/worker:$VERSION
-               docker push docker.pkg.github.com/rq/rq/worker:$VERSION
+               docker tag worker ghcr.io/rq/rq/worker:$VERSION
+               docker push ghcr.io/rq/rq/worker:$VERSION
           done
