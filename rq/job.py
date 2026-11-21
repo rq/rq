@@ -715,20 +715,26 @@ class Job:
         return job
 
     @classmethod
-    def fetch_many(cls, job_ids: Iterable[str], connection: Redis, serializer=None) -> list[Job | None]:
+    def fetch_many(
+        cls, job_ids: Iterable[str], connection: Redis, serializer=None, *, allow_partial: bool = False
+    ) -> list[Job | None]:
         """
         Bulk version of Job.fetch
 
         For any job_ids which a job does not exist, the corresponding item in
         the returned list will be None.
 
+        If allow_partial is True, jobs that raise NoSuchJobError during
+        restoration also return None. Other errors are still raised.
+
         Args:
             job_ids (Iterable[str]): A list of job ids.
             connection (Redis): Redis connection
             serializer (Callable): A serializer
+            allow_partial (bool): Whether to continue after a job raises NoSuchJobError. Defaults to False.
 
         Returns:
-            jobs (list[Optional[Job]]): A list of Jobs instances, elements are None if a job_id does not exist.
+            jobs (list[Optional[Job]]): Jobs or None placeholders, in the same order as job_ids.
         """
         parsed_ids = [parse_job_id(job_id) for job_id in job_ids]
         with connection.pipeline() as pipeline:
@@ -743,8 +749,14 @@ class Job:
                 continue
 
             job = cls(job_id, connection=connection, serializer=serializer)
-            job.restore(results[i])
-            jobs.append(job)
+            try:
+                job.restore(results[i])
+            except NoSuchJobError:
+                if not allow_partial:
+                    raise
+                jobs.append(None)
+            else:
+                jobs.append(job)
 
         return jobs
 

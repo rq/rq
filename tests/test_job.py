@@ -7,6 +7,8 @@ from datetime import datetime, timezone
 from pickle import dumps, loads
 from uuid import uuid4
 
+from redis.exceptions import ResponseError
+
 from rq.defaults import CALLBACK_TIMEOUT
 from rq.exceptions import DeserializationError, InvalidJobOperation, NoSuchJobError
 from rq.executions import Execution
@@ -232,6 +234,57 @@ class TestJob(RQTestCase):
         execution = worker.execution
         self.assertEqual(Job.fetch_many([execution.composite_key], self.connection), [job])  # type: ignore
         self.assertEqual(Job.fetch_many([job.id], self.connection), [job])
+
+    def test_fetch_many_allow_partial(self):
+        """Partial fetches preserve healthy jobs and the positions of missing data."""
+        job = Job.create(fixtures.some_calculation, args=(3, 4), kwargs={'z': 2}, connection=self.connection)
+        job.save()
+        job2 = Job.create(fixtures.say_hello, args=('world',), connection=self.connection)
+        job2.save()
+        self.connection.hset(Job.key_for('canceled'), 'status', 'canceled')
+        self.connection.hset(Job.key_for('heartbeat'), 'last_heartbeat', '2021-06-15T01:34:42.185285Z')
+        job_ids = [job.id, 'canceled', 'missing', job2.id, 'heartbeat', job.id, 'canceled']
+
+        with self.assertRaises(NoSuchJobError):
+            Job.fetch_many(job_ids, self.connection)
+        with self.assertRaises(NoSuchJobError):
+            Job.fetch_many(job_ids, self.connection, allow_partial=False)
+
+        fetched = Job.fetch_many(iter(job_ids), self.connection, allow_partial=True)
+        self.assertEqual(fetched, [job, None, None, job2, None, job, None])
+        self.assertEqual(fetched[0].args, (3, 4))
+        self.assertEqual(fetched[0].kwargs, {'z': 2})
+        self.assertEqual(fetched[3].args, ('world',))
+        self.assertEqual(self.connection.hgetall(Job.key_for('canceled')), {b'status': b'canceled'})
+
+    def test_fetch_many_allow_partial_preserves_job_class_and_serializer(self):
+        job = fixtures.CustomJob.create(
+            fixtures.some_calculation, args=(3, 4), connection=self.connection, serializer=JSONSerializer
+        )
+        job.save()
+        self.connection.hset(Job.key_for('canceled'), 'status', 'canceled')
+
+        fetched = fixtures.CustomJob.fetch_many(
+            ['canceled', job.id], self.connection, JSONSerializer, allow_partial=True
+        )
+        self.assertIsNone(fetched[0])
+        self.assertIsInstance(fetched[1], fixtures.CustomJob)
+        self.assertIs(fetched[1].serializer, JSONSerializer)
+        self.assertEqual(fetched[1].args, [3, 4])
+
+    def test_fetch_many_allow_partial_does_not_hide_other_errors(self):
+        job = Job.create(fixtures.say_hello, connection=self.connection)
+        job.save()
+        self.connection.hset(job.key, 'status', 'invalid')
+        for allow_partial in (False, True):
+            with self.subTest(allow_partial=allow_partial), self.assertRaises(ValueError):
+                Job.fetch_many([job.id], self.connection, allow_partial=allow_partial)
+
+        self.connection.delete(job.key)
+        self.connection.set(job.key, 'not a job hash')
+        for allow_partial in (False, True):
+            with self.subTest(allow_partial=allow_partial), self.assertRaises(ResponseError):
+                Job.fetch_many([job.id], self.connection, allow_partial=allow_partial)
 
     def test_persistence_of_empty_jobs(self):  # noqa
         """Storing empty jobs."""
