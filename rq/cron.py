@@ -85,6 +85,7 @@ class CronJob:
         meta: dict | None = None,
         webhooks: Sequence[Webhook] | None = None,
         name: str = '',
+        connection: Redis | None = None,
     ):
         if interval and cron:
             raise ValueError('Cannot specify both interval and cron parameters')
@@ -110,6 +111,7 @@ class CronJob:
         self.kwargs: dict = kwargs or {}
         self.interval: int | None = interval
         self.cron: str | None = cron
+        self.connection = connection
         self.queue_name: str = queue_name
         self.next_enqueue_time: datetime | None = None
         self.latest_enqueue_time: datetime | None = None
@@ -140,6 +142,7 @@ class CronJob:
         if not self.func:
             raise ValueError('CronJob has no function to enqueue. It may have been created for monitoring purposes.')
 
+        connection = self.connection if self.connection is not None else connection
         queue = Queue(self.queue_name, connection=connection)
         # Enqueue the job and record it in one round trip
         with connection.pipeline() as pipeline:
@@ -338,6 +341,7 @@ class CronScheduler:
         meta: dict | None = None,
         webhooks: Sequence[Webhook] | None = None,
         name: str = '',
+        connection: Redis | None = None,
     ) -> CronJob:
         """Register a function to be run at regular intervals"""
         cron_job = CronJob(
@@ -354,6 +358,7 @@ class CronScheduler:
             meta=meta,
             webhooks=webhooks,
             name=name,
+            connection=connection,
         )
 
         self._cron_jobs.append(cron_job)
@@ -688,6 +693,7 @@ def register(
     meta: dict | None = None,
     webhooks: Sequence[Webhook] | None = None,
     name: str = '',
+    connection: Redis | None = None,
 ) -> dict:
     """
     Register a function to be run as a cron job by adding its definition
@@ -720,6 +726,7 @@ def register(
         'meta': meta,
         'webhooks': webhooks,
         'name': name,
+        'connection': connection,
     }
     # Add to the global registry
     _job_data_registry.append(job_data)

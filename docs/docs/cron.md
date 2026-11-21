@@ -81,6 +81,31 @@ Key concepts:
 3. **Worker execution**: RQ workers pick up and execute the jobs from their queues (workers need to be run separately)
 4. **Sleep**: `CronScheduler` sleeps until the next job is due
 
+## Queues on another Redis connection
+
+By default, cron jobs use the scheduler's Redis connection. Pass `connection`
+to `register()` when a job's workers listen on another Redis database or server:
+
+```python
+from redis import Redis
+from rq import cron
+from myapp import cleanup_temp_files
+
+cron.register(
+    cleanup_temp_files,
+    queue_name='maintenance',
+    interval=60,
+    connection=Redis(db=5),
+)
+```
+
+The same optional argument is available on `CronScheduler.register()`.
+The job, its cron history, and its cron job registry entry are written on the
+supplied connection. Scheduler registration and monitoring remain on the
+scheduler's connection. Query job history using the job's target connection.
+The connection override stays in the running configuration and is not serialized
+into scheduler monitoring metadata.
+
 ## Scheduling Options
 
 `CronScheduler` supports two scheduling methods.
