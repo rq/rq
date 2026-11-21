@@ -152,3 +152,18 @@ RQ Exceptions you can get in your job failure callbacks
 This error means an unfinished job was collected by another worker's maintenance task.
 This usually happens when a worker is busy with a job and is terminated before it finished that job.
 Another worker collects this job and moves it to the FailedJobRegistry.
+
+## Timeout exception compatibility
+
+`BaseTimeoutException`, `JobTimeoutException`, and `HorseMonitorTimeoutException`
+are control-flow exceptions derived from `BaseException`. A broad
+`except Exception` handler no longer intercepts them. This is an intentional
+compatibility change: application error handling must not silently defeat a
+worker's execution deadline.
+
+Use `finally` for cleanup that must also run when a job times out. Code that
+needs to observe a timeout can catch `JobTimeoutException` explicitly and
+re-raise it so the worker can record the failure. Custom death-penalty wrappers
+that previously caught every timeout through `Exception` should catch
+`BaseTimeoutException` explicitly instead. Exception type names and explicit
+timeout handlers are unchanged.
