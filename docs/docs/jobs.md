@@ -154,8 +154,21 @@ If you want to efficiently fetch a large number of jobs, use `Job.fetch_many()`.
 ```python
 jobs = Job.fetch_many(['foo_id', 'bar_id'], connection=redis)
 for job in jobs:
-    print('Job %s: %s' % (job.id, job.func_name))
+    if job is not None:
+        print('Job %s: %s' % (job.id, job.func_name))
 ```
+
+A missing job key has a `None` entry in the returned list. By default, a
+`NoSuchJobError` raised while restoring a job aborts the fetch. Pass
+`allow_partial=True` to also return `None` at those jobs' positions, such as
+when a job hash is missing its `data` field:
+
+```python
+jobs = Job.fetch_many(['foo_id', 'bar_id'], connection=redis, allow_partial=True)
+```
+
+Other errors still propagate. The returned list preserves the input order,
+including repeated job IDs.
 
 
 ## Job Executions
