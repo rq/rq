@@ -1013,6 +1013,34 @@ class TestRateLimitScheduledJobs(RQTestCase):
         self.assertNotIn(scheduled_job.id, self.queue.job_ids)
         self.assertIn(scheduled_job.id, registry.get_rate_limited_job_ids())
 
+    def test_scheduled_rate_limited_job_canceled_while_enqueued(self):
+        """A due rate-limited job canceled while the scheduler enqueues it neither takes a
+        slot nor lands on the queue."""
+        rate_limit = RateLimit(key='test', concurrency=1)
+        scheduled_job = self.queue.enqueue_at(datetime(2019, 1, 1), say_hello, rate_limit=rate_limit)
+        scheduler = RQScheduler([self.queue], connection=self.connection)
+        scheduler.acquire_locks()
+
+        fetch_many = Job.fetch_many.__func__
+        calls = []
+
+        def fetch_many_then_cancel(cls, *args, **kwargs):
+            jobs = fetch_many(cls, *args, **kwargs)
+            if not calls:
+                calls.append(True)
+                Job.fetch(scheduled_job.id, connection=self.connection).cancel()
+            return jobs
+
+        with mock.patch.object(Job, 'fetch_many', classmethod(fetch_many_then_cancel)):
+            scheduler.enqueue_scheduled_jobs()
+
+        registry = RateLimitRegistry(key='test', connection=self.connection)
+        self.assertEqual(scheduled_job.get_status(), JobStatus.CANCELED)
+        self.assertEqual(self.queue.job_ids, [])
+        self.assertEqual(registry.get_allowed_job_ids(), [])
+        self.assertEqual(registry.get_rate_limited_job_ids(), [])
+        self.assertEqual(len(ScheduledJobRegistry(queue=self.queue)), 0)
+
 
 class TestRateLimitRetry(RQTestCase):
     """Test rate-limit slot management during job retries."""
