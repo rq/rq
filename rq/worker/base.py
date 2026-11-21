@@ -1161,7 +1161,6 @@ class BaseWorker:
         self.log.debug('Worker %s: *** Listening on %s...', self.name, green(qnames))
         connection_wait_time = 1.0
         idle_since = now()
-        idle_time_left = max_idle_time
         while True:
             try:
                 self.heartbeat()
@@ -1169,8 +1168,13 @@ class BaseWorker:
                 if self.should_run_maintenance_tasks:
                     self.run_maintenance_tasks()
 
-                if timeout is not None and idle_time_left is not None:
-                    timeout = min(timeout, idle_time_left)
+                if max_idle_time is not None:
+                    idle_for = (now() - idle_since).total_seconds()
+                    idle_time_left = math.ceil(max_idle_time - idle_for)
+                    if idle_time_left <= 0:
+                        return None
+                    if timeout is not None:
+                        timeout = min(timeout, idle_time_left)
 
                 self.log.debug(
                     'Worker %s: dequeueing jobs on queues %s and timeout %s', self.name, green(qnames), timeout
@@ -1197,21 +1201,30 @@ class BaseWorker:
 
                 break
             except DequeueTimeout:
+                pass
+            except (redis.exceptions.ConnectionError, redis.exceptions.TimeoutError) as conn_err:
+                retry_delay = connection_wait_time
                 if max_idle_time is not None:
                     idle_for = (now() - idle_since).total_seconds()
-                    idle_time_left = math.ceil(max_idle_time - idle_for)
-                    if idle_time_left <= 0:
-                        break
-            except (redis.exceptions.ConnectionError, redis.exceptions.TimeoutError) as conn_err:
+                    remaining = max_idle_time - idle_for
+                    if remaining <= 0:
+                        return None
+                    retry_delay = min(retry_delay, remaining)
                 self.log.error(
                     'Worker %s: could not connect to Redis instance: %s retrying in %d seconds...',
                     self.name,
                     conn_err,
-                    connection_wait_time,
+                    retry_delay,
                 )
-                time.sleep(connection_wait_time)
+                time.sleep(retry_delay)
                 connection_wait_time *= self.exponential_backoff_factor
                 connection_wait_time = min(connection_wait_time, self.max_connection_wait_time)
+
+            if max_idle_time is not None:
+                idle_for = (now() - idle_since).total_seconds()
+                idle_time_left = math.ceil(max_idle_time - idle_for)
+                if idle_time_left <= 0:
+                    return None
 
         self.heartbeat()
         return result
