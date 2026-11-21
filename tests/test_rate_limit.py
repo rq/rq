@@ -494,6 +494,33 @@ class TestRateLimitEnqueue(RQTestCase):
             registry.cleanup()
             self.assertEqual(registry.get_allowed_job_ids(), [job_2.id])
 
+    def test_queue_empty_releases_slots(self):
+        """Queue.empty() frees the slots of the jobs it deletes and promotes waiting jobs."""
+        rate_limit = RateLimit(key='test', concurrency=1)
+        deleted = self.queue.enqueue(say_hello, rate_limit=rate_limit)
+        waiting = self.queue.enqueue(say_hello, rate_limit=rate_limit)
+        registry = RateLimitRegistry(key='test', connection=self.connection)
+
+        self.assertEqual(self.queue.empty(), 1)
+
+        self.assertFalse(Job.exists(deleted.id, connection=self.connection))
+        self.assertEqual(registry.get_allowed_job_ids(), [waiting.id])
+        self.assertEqual(waiting.get_status(), JobStatus.QUEUED)
+        self.assertEqual(self.queue.job_ids, [waiting.id])
+
+    def test_queue_delete_releases_slots(self):
+        """Queue.delete() keeps a job it promotes, so the job's slot does not leak."""
+        rate_limit = RateLimit(key='test', concurrency=1)
+        self.queue.enqueue(say_hello, rate_limit=rate_limit)
+        waiting = self.queue.enqueue(say_hello, rate_limit=rate_limit)
+        registry = RateLimitRegistry(key='test', connection=self.connection)
+
+        self.queue.delete()
+
+        self.assertEqual(registry.get_allowed_job_ids(), [waiting.id])
+        self.assertEqual(self.queue.job_ids, [waiting.id])
+        self.assertIn(self.queue.name, [queue.name for queue in Queue.all(connection=self.connection)])
+
     def test_enqueue_with_rate_limit(self):
         """Jobs exceeding concurrency limit are deferred, others are queued."""
         rate_limit = RateLimit(key='test', concurrency=2)
