@@ -149,7 +149,7 @@ class BaseRegistry:
             if isinstance(job, self.job_class):
                 job_instance = job
             else:
-                job_instance = Job.fetch(job_id, connection=connection, serializer=self.serializer)
+                job_instance = Job.fetch(job_id, connection=self.connection, serializer=self.serializer)
             job_instance.delete()
         return result
 
