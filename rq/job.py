@@ -1765,7 +1765,7 @@ class Job:
         Returns:
             retry_interval (int): The desired retry interval
         """
-        if self.retry_intervals is None:
+        if not self.retry_intervals:
             return 0
         number_of_intervals = len(self.retry_intervals)
         assert self.retries_left
