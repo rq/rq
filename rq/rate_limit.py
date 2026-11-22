@@ -180,7 +180,7 @@ class RateLimitRegistry:
     def add_to_rate_limited(self, job_id: str, pipeline: Pipeline, timestamp: float | None = None) -> None:
         """Add a job to the rate_limited set."""
         if timestamp is None:
-            timestamp = current_timestamp()
+            timestamp = now().timestamp()
         pipeline.zadd(self.rate_limited_key, {job_id: timestamp})
 
     def acquire_and_enqueue(
