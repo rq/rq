@@ -139,6 +139,33 @@ class TestRateLimitRegistry(RQTestCase):
         self._add_to_rate_limited('job3', timestamp=3)
         self.assertEqual(self.rate_limit_registry.get_rate_limited_job_ids(), ['job1', 'job2', 'job3'])
 
+    def test_subsecond_waiters_are_promoted_in_enqueue_order(self):
+        """Distinct enqueue times within a second must not be ordered by job ID."""
+        job_ids = ['job-z', 'job-m', 'job-a']
+        for job_id in job_ids:
+            job = Job.create(
+                func='tests.fixtures.say_hello',
+                id=job_id,
+                connection=self.connection,
+                origin='default',
+                status=JobStatus.RATE_LIMITED,
+            )
+            job.save()
+        enqueue_times = [
+            datetime(2026, 11, 22, 12, 0, 0, microsecond, timezone.utc) for microsecond in (100000, 200000, 300000)
+        ]
+        with (
+            mock.patch('rq.utils.now', side_effect=enqueue_times),
+            mock.patch('rq.rate_limit.now', side_effect=enqueue_times),
+        ):
+            for job_id in job_ids:
+                self._add_to_rate_limited(job_id)
+
+        self.assertEqual(self.rate_limit_registry.get_rate_limited_job_ids(), job_ids)
+        self.assertEqual(self.rate_limit_registry.acquire_and_enqueue(concurrency=2), job_ids[:2])
+        self.assertEqual(self.queue.job_ids, job_ids[:2])
+        self.assertEqual(self.rate_limit_registry.get_rate_limited_job_ids(), job_ids[2:])
+
     def test_acquire_and_enqueue(self):
         """acquire_and_enqueue enqueues a rate_limited job when capacity is available,
         returns [] when at capacity or no rate_limited jobs."""
