@@ -199,6 +199,11 @@ class WorkerPool:
         process.start()
         worker_data = WorkerData(name=name, pid=process.pid, process=process)  # type: ignore
         self.worker_dict[name] = worker_data
+        # A stop requested while the process was starting missed this worker
+        # (stop_workers() only signals workers already in worker_dict), so
+        # re-check the pool status and signal it if the pool is stopping.
+        if self.status == self.Status.STOPPED:
+            self.stop_worker(worker_data)
         self.log.debug('Spawned worker: %s with PID %d', name, process.pid)
 
     def start_workers(self, burst: bool = True, _sleep: float = 0, logging_level: str = 'INFO'):
@@ -272,6 +277,12 @@ def run_worker(
     logging_level: str = 'INFO',
     _sleep: int = 0,
 ):
+    # The forked child inherits the pool's SIGINT/SIGTERM handlers. Reset them
+    # to the defaults so a stop signal that arrives before the worker installs
+    # its own handlers (in work()) terminates the process instead of running
+    # the pool's handler in the child.
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
+    signal.signal(signal.SIGTERM, signal.SIG_DFL)
     connection = connection_class(
         connection_pool=ConnectionPool(connection_class=connection_pool_class, **connection_pool_kwargs)
     )
