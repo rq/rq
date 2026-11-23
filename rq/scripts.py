@@ -1,6 +1,6 @@
 import calendar
 import logging
-from typing import Any, Literal
+from typing import Literal
 
 from .defaults import RQ_KEY_PREFIX
 from .exceptions import DuplicateJobError
@@ -43,15 +43,10 @@ UNIQUE_ENQUEUE_SCRIPT = """
     return 1  -- Success
 """
 
-# Cache registered scripts per connection
-_registered_scripts: dict[Any, Any] = {}
-
 
 def get_unique_enqueue_script(connection):
-    """Get or create the registered Lua script for unique enqueue."""
-    if connection not in _registered_scripts:
-        _registered_scripts[connection] = connection.register_script(UNIQUE_ENQUEUE_SCRIPT)
-    return _registered_scripts[connection]
+    """Return the registered Lua script for unique enqueue."""
+    return connection.register_script(UNIQUE_ENQUEUE_SCRIPT)
 
 
 def save_unique_job(connection, queue_key, job, enqueue=True, at_front=False):
@@ -150,14 +145,9 @@ def _build_hset_args(job):
     return hset_args
 
 
-_registered_schedule_scripts: dict[Any, Any] = {}
-
-
 def get_unique_schedule_script(connection):
-    """Get or create the registered Lua script for unique schedule."""
-    if connection not in _registered_schedule_scripts:
-        _registered_schedule_scripts[connection] = connection.register_script(UNIQUE_SCHEDULE_SCRIPT)
-    return _registered_schedule_scripts[connection]
+    """Return the registered Lua script for unique schedule."""
+    return connection.register_script(UNIQUE_SCHEDULE_SCRIPT)
 
 
 def schedule_unique_job(connection, queue_key, registry_key, job, scheduled_datetime):
