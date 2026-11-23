@@ -28,7 +28,7 @@ if TYPE_CHECKING:
 from .callbacks import Callback, execute_failure_callback, execute_success_callback
 from .defaults import DEFAULT_RESULT_TTL, RQ_KEY_PREFIX
 from .dependency import Dependency
-from .exceptions import DequeueTimeout, NoSuchJobError
+from .exceptions import DequeueTimeout, NoSuchJobError, UnsupportedCompressionError
 from .intermediate_queue import IntermediateQueue
 from .job import Job, JobStatus
 from .job_lifecycle import format_exc_info, record_job_failure
@@ -633,7 +633,6 @@ class Queue:
 
         job = self.job_class.create(
             func,
-            use_zstd=self.use_zstd,
             args=args,
             kwargs=kwargs,
             connection=self.connection,
@@ -711,7 +710,7 @@ class Queue:
                             # to be set back to their original values in the handling of WatchError below!
                             job.set_status(JobStatus.DEFERRED, pipeline=pipe)
                             job.register_dependency(pipeline=pipe)
-                            job.save(pipeline=pipe)
+                            job.save(pipeline=pipe, use_zstd=self.use_zstd)
                             job.cleanup(ttl=job.ttl, pipeline=pipe)
                             if pipeline is None:
                                 pipe.execute()
@@ -972,7 +971,7 @@ class Queue:
                 for job_data in job_datas_with_dependencies
             ]
             for job in jobs_with_dependencies:
-                job.save(pipeline=pipe)
+                job.save(pipeline=pipe, use_zstd=self.use_zstd)
             if pipeline is None:
                 pipe.execute()
 
@@ -1230,7 +1229,7 @@ class Queue:
         if unique:
             job._status = JobStatus.SCHEDULED
             # Atomic: check uniqueness, save job, add to scheduled registry, register queue
-            schedule_unique_job(self.connection, self.key, registry.key, job, datetime)
+            schedule_unique_job(self.connection, self.key, registry.key, job, datetime, use_zstd=self.use_zstd)
             return job
 
         pipe = pipeline if pipeline is not None else self.connection.pipeline()
@@ -1345,7 +1344,7 @@ class Queue:
             job.enqueue_at_front = True
         pipe = pipeline if pipeline is not None else self.connection.pipeline()
         registry.register(job.rate_limit_concurrency, pipe)
-        job.save(pipeline=pipe)
+        job.save(pipeline=pipe, use_zstd=self.use_zstd)
         job.cleanup(ttl=job.ttl, pipeline=pipe)
         registry.add_to_rate_limited(job.id, pipe)
 
@@ -1410,7 +1409,7 @@ class Queue:
             status (JobStatus): The job status to set. Defaults to JobStatus.QUEUED.
         """
         job.set_status(status, pipeline=pipeline)
-        job.save(pipeline=pipeline)
+        job.save(pipeline=pipeline, use_zstd=self.use_zstd)
         job.cleanup(ttl=job.ttl, pipeline=pipeline)
 
     def _enqueue_async_job(
@@ -1436,7 +1435,7 @@ class Queue:
         if unique:
             # Use atomic Lua script for unique enqueue (check + save + push)
             # Note: pipeline is ignored when unique=True because the Lua script is atomic
-            save_unique_job(self.connection, self.key, job, at_front=at_front)
+            save_unique_job(self.connection, self.key, job, at_front=at_front, use_zstd=self.use_zstd)
         else:
             pipe = pipeline if pipeline is not None else self.connection.pipeline()
 
@@ -1469,7 +1468,7 @@ class Queue:
 
         if unique:
             # Use atomic Lua script for unique check and save (without pushing to queue)
-            save_unique_job(self.connection, self.key, job, enqueue=False)
+            save_unique_job(self.connection, self.key, job, enqueue=False, use_zstd=self.use_zstd)
         else:
             pipe = pipeline if pipeline is not None else self.connection.pipeline()
 
@@ -1833,6 +1832,10 @@ class Queue:
             # Silently pass on jobs that don't exist (anymore)
             return None
         except Exception as e:
+            if isinstance(e, UnsupportedCompressionError):
+                # The ID has already been removed from the ready queue. Return
+                # restore failures to the queue so other workers can recover it.
+                queue.intermediate_queue.requeue(job_id)
             # Attach queue information on the exception for improved error
             # reporting
             e.job_id = job_id  # type: ignore[attr-defined]

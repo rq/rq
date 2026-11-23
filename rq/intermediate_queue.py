@@ -5,11 +5,27 @@ from typing import TYPE_CHECKING
 
 from redis import Redis
 
+from rq.exceptions import UnsupportedCompressionError
 from rq.utils import now
 
 if TYPE_CHECKING:
     from .queue import Queue
     from .worker import BaseWorker
+
+
+_REQUEUE_JOB_SCRIPT = """
+local job_ids = redis.call('LRANGE', KEYS[1], 0, -1)
+for _, queued_job_id in ipairs(job_ids) do
+    if queued_job_id == ARGV[1] then
+        redis.call('LREM', KEYS[2], 1, ARGV[1])
+        return 0
+    end
+end
+
+redis.call('LREM', KEYS[2], 1, ARGV[1])
+redis.call('LPUSH', KEYS[1], ARGV[1])
+return 1
+"""
 
 
 class IntermediateQueue:
@@ -96,11 +112,22 @@ class IntermediateQueue:
         """
         self.connection.lrem(self.key, 1, job_id)
 
+    def requeue(self, job_id: str) -> None:
+        """Return a dequeued job ID to its original queue atomically and at most once."""
+        script = self.connection.register_script(_REQUEUE_JOB_SCRIPT)
+        script(keys=[self.queue_key, self.key], args=[job_id])
+
     def cleanup(self, worker: BaseWorker, queue: Queue) -> None:
         job_ids = self.get_job_ids()
 
         for job_id in job_ids:
-            job = queue.fetch_job(job_id)
+            try:
+                job = queue.fetch_job(job_id)
+            except UnsupportedCompressionError:
+                # A job that cannot be restored (for example, a Zstandard job on
+                # a worker without Zstandard support) must not remain stuck here.
+                self.requeue(job_id)
+                continue
 
             if job_id not in queue.started_job_registry:
                 if not job:

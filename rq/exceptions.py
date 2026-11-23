@@ -10,6 +10,10 @@ class DeserializationError(Exception):
     """Raised when a job's stored data (function, args and kwargs) cannot be loaded by its serializer."""
 
 
+class UnsupportedCompressionError(RuntimeError):
+    """Raised when a payload uses a compression format that RQ cannot decode."""
+
+
 class InvalidJobDependency(Exception):
     """Not currently raised by RQ."""
 

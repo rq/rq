@@ -267,6 +267,28 @@ $ rq worker --serializer json
 $ rq worker --serializer rq.serializers.JSONSerializer
 ```
 
+## Compressing Stored Job Data
+
+RQ uses Zlib to compress job data and exception information by default. To use Zstandard for writes performed while
+enqueueing jobs, pass `use_zstd=True` to the queue:
+
+Zstandard writes require Python 3.14 or newer.
+
+```python
+queue = Queue(connection=connection, use_zstd=True)
+job = queue.enqueue('my_module.count_words', 'https://example.com')
+```
+
+
+For a direct save, opt in on that call with `job.save(use_zstd=True)`. The setting is per write; calls to
+`Job.save()` without it use Zlib. Restored jobs do not retain compression state, and existing Zlib-compressed jobs
+remain readable.
+
+**Compatibility warning:** Workers without Zstandard support cannot process jobs stored using Zstandard compression.
+Enable Zstandard writes only when all workers that may process those jobs support Zstandard. Keep Zstandard disabled
+during mixed-version deployments where some workers lack this support.
+
+
 ## Accessing The "current" Job from within the job function
 
 Since job functions are regular Python functions, you must retrieve the
@@ -423,3 +445,4 @@ rq requeue --queue myqueue -u redis://localhost:6379 foo_job_id bar_job_id
 # This command will requeue all jobs in myqueue's failed job registry
 rq requeue --queue myqueue -u redis://localhost:6379 --all
 ```
+**Compatibility warning:** Workers without Zstandard support cannot process jobs stored using Zstandard compression. Enable Zstandard writes only when all workers that may process those jobs support Zstandard. Keep Zstandard disabled during mixed-version deployments where some workers lack this support.

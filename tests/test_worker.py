@@ -21,7 +21,7 @@ import redis.exceptions
 from rq import Queue, SimpleWorker, Worker
 from rq.connections import get_connection_kwargs
 from rq.defaults import DEFAULT_MAINTENANCE_TASK_INTERVAL, DEFAULT_WORKER_TTL
-from rq.job import Job, JobStatus, Retry
+from rq.job import ZSTD_MAGIC, Job, JobStatus, Retry, zstd
 from rq.registry import FailedJobRegistry, FinishedJobRegistry, StartedJobRegistry
 from rq.results import Result
 from rq.serializers import JSONSerializer
@@ -380,6 +380,93 @@ class TestWorker(RQTestCase):
 
         # An exception should be logged here at ERROR level
         self.assertIn('DeserializationError', mock_logger_error.call_args[0][3])
+
+    def test_unrestorable_zstd_job_is_requeued_without_changing_its_data(self):
+        """A worker that cannot restore a job leaves it and following jobs queued."""
+        queue = Queue('unsupported-zstd', connection=self.connection)
+        job = queue.enqueue(say_hello)
+        unsupported_data = ZSTD_MAGIC + b'payload from a newer worker'
+        self.connection.hset(job.key, 'data', unsupported_data)
+        following_job = queue.enqueue(say_hello, 'following job')
+
+        other_queue = Queue('other-queue', connection=self.connection)
+        worker = Worker([queue, other_queue], connection=self.connection)
+        with mock.patch('rq.job.zstd', None):
+            self.assertFalse(worker.work(burst=True))
+
+        self.assertEqual(queue.get_job_ids(), [job.id, following_job.id])
+        self.assertEqual(queue.intermediate_queue.get_job_ids(), [])
+        self.assertEqual(self.connection.hget(job.key, 'data'), unsupported_data)
+        self.assertEqual(job.get_status(refresh=True), JobStatus.QUEUED)
+
+    def test_unrelated_runtime_error_during_restore_is_not_requeued(self):
+        """Programming errors during restore are not treated as unsupported compression."""
+        queue = Queue('runtime-error-restore', connection=self.connection)
+        queue.enqueue(say_hello)
+        other_queue = Queue('runtime-error-other', connection=self.connection)
+
+        with mock.patch.object(Job, 'restore', side_effect=RuntimeError('restore bug')):
+            with self.assertRaisesRegex(RuntimeError, 'restore bug'):
+                Queue.dequeue_any([queue, other_queue], timeout=None, connection=self.connection)
+
+        self.assertEqual(queue.get_job_ids(), [])
+        self.assertEqual(queue.intermediate_queue.get_job_ids(), [])
+
+    @min_redis_version((6, 2, 0))
+    def test_unrestorable_zstd_job_is_requeued_from_intermediate_queue(self):
+        """Reliable dequeue returns an unrestorable job from intermediate to ready."""
+        queue = Queue('reliable-unsupported-zstd', connection=self.connection)
+        job = Job.create(func=say_hello, origin=queue.name, connection=self.connection)
+        job.save()
+        unsupported_data = ZSTD_MAGIC + b'payload from a newer worker'
+        self.connection.hset(job.key, 'data', unsupported_data)
+        queue.push_job_id(job.id)
+
+        worker = Worker([queue], connection=self.connection)
+        with mock.patch('rq.job.zstd', None):
+            self.assertFalse(worker.work(burst=True))
+
+        self.assertEqual(queue.get_job_ids(), [job.id])
+        self.assertEqual(queue.intermediate_queue.get_job_ids(), [])
+        self.assertEqual(self.connection.hget(job.key, 'data'), unsupported_data)
+
+    def test_intermediate_cleanup_requeues_unrestorable_zstd_job(self):
+        """Maintenance returns an older stuck Zstandard job to its ready queue."""
+        queue = Queue('stuck-unsupported-zstd', connection=self.connection)
+        job = Job.create(func=say_hello, origin=queue.name, connection=self.connection)
+        job.save()
+        unsupported_data = ZSTD_MAGIC + b'payload from a newer worker'
+        self.connection.hset(job.key, 'data', unsupported_data)
+        self.connection.rpush(queue.intermediate_queue_key, job.id)
+        worker = Worker([queue], connection=self.connection)
+
+        with mock.patch('rq.job.zstd', None):
+            queue.intermediate_queue.cleanup(worker, queue)
+
+        self.assertEqual(queue.intermediate_queue.get_job_ids(), [])
+        self.assertEqual(queue.get_job_ids(), [job.id])
+        self.assertEqual(self.connection.hget(job.key, 'data'), unsupported_data)
+
+    def test_supported_worker_can_process_requeued_zstd_and_following_jobs(self):
+        """A compatible worker can process jobs after an unsupported worker exits."""
+        if zstd is None:
+            self.skipTest('Zstandard is not available')
+
+        queue = Queue('recover-zstd', connection=self.connection, use_zstd=True)
+        zstd_job = queue.enqueue(say_hello, 'Zstandard job')
+        following_job = queue.enqueue(say_hello, 'following job')
+        worker = Worker([queue], connection=self.connection)
+
+        with mock.patch('rq.job.zstd', None):
+            self.assertFalse(worker.work(burst=True))
+
+        self.assertEqual(queue.get_job_ids(), [zstd_job.id, following_job.id])
+
+        compatible_worker = Worker([queue], connection=self.connection)
+        self.assertTrue(compatible_worker.work(burst=True))
+        self.assertEqual(queue.get_job_ids(), [])
+        self.assertEqual(zstd_job.get_status(refresh=True), JobStatus.FINISHED)
+        self.assertEqual(following_job.get_status(refresh=True), JobStatus.FINISHED)
 
     def test_heartbeat(self):
         """Heartbeat saves last_heartbeat"""

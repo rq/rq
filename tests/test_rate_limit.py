@@ -6,7 +6,7 @@ from redis.client import Pipeline
 
 from rq.exceptions import InvalidJobOperation
 from rq.executions import Execution, ExecutionRegistry
-from rq.job import Job, JobStatus, Retry
+from rq.job import ZSTD_MAGIC, Job, JobStatus, Retry, zstd
 from rq.queue import Queue
 from rq.rate_limit import RateLimit, RateLimitRegistry, release_slot
 from rq.registry import ScheduledJobRegistry, StartedJobRegistry
@@ -44,6 +44,18 @@ class TestRateLimit(RQTestCase):
 
 class TestRateLimitJob(RQTestCase):
     """Test rate limit fields on Job."""
+
+    def test_rate_limited_enqueue_uses_queue_zstd_setting(self):
+        """Rate-limited enqueue persists Zstandard when enabled on the Queue."""
+        if zstd is None:
+            self.skipTest('Zstandard is not available')
+
+        queue = Queue(connection=self.connection, use_zstd=True)
+        job = queue.enqueue(say_hello, rate_limit=RateLimit(key='zstd-rate-limit', concurrency=1))
+
+        compressed_data = self.connection.hget(job.key, 'data')
+        self.assertTrue(compressed_data.startswith(ZSTD_MAGIC))
+        self.assertEqual(zstd.decompress(compressed_data), job.data)
 
     def test_rate_limit_job_persistence(self):
         """Rate limit fields survive save/fetch round-trip."""

@@ -1,5 +1,7 @@
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
-from unittest.mock import patch
+from threading import Barrier
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -217,3 +219,56 @@ class TestIntermediateQueue(RQTestCase):
         with pytest.deprecated_call():
             worker = Worker(self.queue, connection=self.connection)
             clean_intermediate_queue(worker, self.queue)
+
+
+class TestIntermediateQueueRecovery(RQTestCase):
+    def setUp(self):
+        super().setUp()
+        self.queue = Queue('recovery', connection=self.connection)
+        self.intermediate_queue = IntermediateQueue(self.queue.key, connection=self.connection)
+
+    def test_concurrent_requeue_attempts_add_only_one_ready_entry(self):
+        """Concurrent recovery is atomic and idempotent for intermediate jobs."""
+        job = self.queue.enqueue(say_hello)
+        original_data = self.connection.hget(job.key, 'data')
+        self.connection.lrem(self.queue.key, 1, job.id)
+        self.connection.rpush(self.intermediate_queue.key, job.id)
+        barrier = Barrier(2)
+
+        def requeue_job():
+            barrier.wait()
+            self.intermediate_queue.requeue(job.id)
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = [executor.submit(requeue_job) for _ in range(2)]
+            for future in futures:
+                future.result()
+
+        self.assertEqual(self.queue.get_job_ids(), [job.id])
+        self.assertEqual(self.intermediate_queue.get_job_ids(), [])
+        self.assertEqual(self.connection.hget(job.key, 'data'), original_data)
+
+    def test_requeue_when_legacy_dequeue_already_popped_job(self):
+        """Recovery restores a job even when the legacy path left no intermediate ID."""
+        job = self.queue.enqueue(say_hello)
+        original_data = self.connection.hget(job.key, 'data')
+        self.connection.lpop(self.queue.key)
+
+        self.assertEqual(self.intermediate_queue.get_job_ids(), [])
+        self.intermediate_queue.requeue(job.id)
+
+        self.assertEqual(self.queue.get_job_ids(), [job.id])
+        self.assertEqual(self.connection.hget(job.key, 'data'), original_data)
+
+    def test_cleanup_propagates_unrelated_runtime_error(self):
+        """Cleanup leaves unrelated RuntimeError failures in the intermediate queue."""
+        job = self.queue.enqueue(say_hello)
+        self.connection.lrem(self.queue.key, 1, job.id)
+        self.connection.rpush(self.intermediate_queue.key, job.id)
+
+        with patch.object(self.queue, 'fetch_job', side_effect=RuntimeError('cleanup bug')):
+            with self.assertRaisesRegex(RuntimeError, 'cleanup bug'):
+                self.intermediate_queue.cleanup(Mock(), self.queue)
+
+        self.assertEqual(self.intermediate_queue.get_job_ids(), [job.id])
+        self.assertEqual(self.queue.get_job_ids(), [])

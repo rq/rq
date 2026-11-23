@@ -54,7 +54,7 @@ def get_unique_enqueue_script(connection):
     return _registered_scripts[connection]
 
 
-def save_unique_job(connection, queue_key, job, enqueue=True, at_front=False):
+def save_unique_job(connection, queue_key, job, enqueue=True, at_front=False, use_zstd: bool = False):
     """Atomically check uniqueness, save job, and optionally push to queue using Lua script.
 
     Args:
@@ -64,6 +64,7 @@ def save_unique_job(connection, queue_key, job, enqueue=True, at_front=False):
         enqueue (bool): Whether to push job ID to the queue. Defaults to True.
             Set to False for sync jobs that don't need to be queued.
         at_front (bool): Whether to push to front of queue
+        use_zstd (bool): Whether to compress the saved job data with Zstandard. Defaults to False.
 
     Returns:
         bool: True if job was enqueued, False if duplicate exists
@@ -73,7 +74,7 @@ def save_unique_job(connection, queue_key, job, enqueue=True, at_front=False):
     """
     script = get_unique_enqueue_script(connection)
 
-    hset_args = _build_hset_args(job)
+    hset_args = _build_hset_args(job, use_zstd=use_zstd)
 
     # Determine TTL (-1 means no TTL)
     ttl = job.ttl if job.ttl is not None else -1
@@ -136,9 +137,9 @@ UNIQUE_SCHEDULE_SCRIPT = """
 """
 
 
-def _build_hset_args(job):
+def _build_hset_args(job, use_zstd: bool = False):
     """Build flat list of field/value pairs from job.to_dict() for use in Lua HSET calls."""
-    job_data = job.to_dict()
+    job_data = job.to_dict(use_zstd=use_zstd)
     hset_args = []
     for key, value in job_data.items():
         if value is not None:
@@ -160,7 +161,7 @@ def get_unique_schedule_script(connection):
     return _registered_schedule_scripts[connection]
 
 
-def schedule_unique_job(connection, queue_key, registry_key, job, scheduled_datetime):
+def schedule_unique_job(connection, queue_key, registry_key, job, scheduled_datetime, use_zstd: bool = False):
     """Atomically check uniqueness, save job, and add to scheduled registry using Lua script.
 
     Args:
@@ -169,6 +170,7 @@ def schedule_unique_job(connection, queue_key, registry_key, job, scheduled_date
         registry_key (str): The Redis key for the scheduled registry (e.g. rq:scheduled:default)
         job (Job): The job to schedule
         scheduled_datetime (datetime): The scheduled execution time
+        use_zstd (bool): Whether to compress the saved job data with Zstandard. Defaults to False.
 
     Returns:
         bool: True if job was scheduled successfully
@@ -178,7 +180,7 @@ def schedule_unique_job(connection, queue_key, registry_key, job, scheduled_date
     """
     script = get_unique_schedule_script(connection)
 
-    hset_args = _build_hset_args(job)
+    hset_args = _build_hset_args(job, use_zstd=use_zstd)
 
     # Determine TTL (-1 means no TTL)
     ttl = job.ttl if job.ttl is not None else -1

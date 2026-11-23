@@ -39,7 +39,7 @@ if TYPE_CHECKING:
 
 
 from .callbacks import Callback
-from .exceptions import DeserializationError, InvalidJobOperation, NoSuchJobError
+from .exceptions import DeserializationError, InvalidJobOperation, NoSuchJobError, UnsupportedCompressionError
 from .serializers import resolve_serializer
 from .types import FunctionReferenceType, JobDependencyType
 from .utils import (
@@ -63,9 +63,7 @@ def _compress(data: bytes, use_zstd: bool = False) -> bytes:
     """Compress data using Zlib by default or Zstandard when enabled."""
     if use_zstd:
         if zstd is None:
-            raise RuntimeError(
-                'Zstandard compression requires Python 3.14 or newer.'
-            )
+            raise RuntimeError('Zstandard compression requires Python 3.14 or newer.')
         return zstd.compress(data)
 
     return zlib.compress(data)
@@ -74,9 +72,7 @@ def _compress(data: bytes, use_zstd: bool = False) -> bytes:
 def _decompress(data: bytes) -> bytes:
     """Decompress Zstandard, Zlib, or legacy uncompressed data."""
     if data.startswith(ZSTD_MAGIC) and zstd is None:
-        raise RuntimeError(
-            'Cannot decompress Zstandard data without Zstandard support.'
-        )
+        raise UnsupportedCompressionError('Cannot decompress Zstandard data without Zstandard support.')
     if zstd is not None:
         try:
             return zstd.decompress(data)
@@ -88,6 +84,7 @@ def _decompress(data: bytes) -> bytes:
     except zlib.error:
         # Support legacy uncompressed data.
         return data
+
 
 logger = logging.getLogger('rq.job')
 
@@ -220,8 +217,6 @@ class Job:
         id: str | None = None,
         connection: Redis | None = None,
         serializer=None,
-        *,
-        use_zstd: bool = False,
     ):
         # Manually check for the presence of the connection argument to preserve
         # backwards compatibility during the transition to RQ v2.0.0.
@@ -265,7 +260,6 @@ class Job:
         # Stored meta that could not be deserialized here, kept so a save writes it back unchanged.
         self._unreadable_meta: bytes | None = None
         self.serializer = resolve_serializer(serializer)
-        self.use_zstd = use_zstd
         # Tracks remaining retries for exception-based retry. Set to retry.max when a job
         # is enqueued with retry=Retry(...) via queue.enqueue(). Decremented each time
         # the job raises an exception and is retried via job.retry().
@@ -311,7 +305,6 @@ class Job:
         serializer=None,
         group_id: str | None = None,
         *,
-        use_zstd: bool = False,
         on_success: Callback | Callable[..., Any] | None = None,  # Callable is deprecated
         on_failure: Callback | Callable[..., Any] | None = None,  # Callable is deprecated
         on_stopped: Callback | Callable[..., Any] | None = None,  # Callable is deprecated
@@ -357,8 +350,6 @@ class Job:
             webhooks (Optional[Sequence[Webhook]], optional): Webhooks to send when the job reaches a matching
                 terminal state (`finished` or `failed`). Defaults to None.
             group_id (Optional[str], optional): A group ID that the job is being added to. Defaults to None.
-            use_zstd (bool, optional): Whether to use Zstandard compression for this job.
-                Defaults to False.
 
         Raises:
             TypeError: If `args` is not a tuple/list
@@ -381,7 +372,6 @@ class Job:
             connection=connection,
             serializer=serializer,
         )
-        job.use_zstd = use_zstd
 
         if id is not None:
             job.id = id
@@ -1031,7 +1021,6 @@ class Job:
             raw_data = obj['data']
         except KeyError:
             raise NoSuchJobError(f'Unexpected job format: {obj}')
-        self.use_zstd = raw_data.startswith(ZSTD_MAGIC)
         self.data = _decompress(raw_data)
 
         self.created_at = str_to_date(v) if (v := obj.get('created_at')) else now()
@@ -1119,7 +1108,6 @@ class Job:
         if raw_exc_info:
             self._exc_info = as_text(_decompress(raw_exc_info))
 
-
     # Persistence
     def refresh(self):  # noqa
         """Overwrite the current instance's properties with the values in the
@@ -1132,7 +1120,13 @@ class Job:
             raise NoSuchJobError(f'No such job: {self.key}')
         self.restore(data)
 
-    def to_dict(self, include_meta: bool = True, include_result: bool = True) -> dict:
+    def to_dict(
+        self,
+        include_meta: bool = True,
+        include_result: bool = True,
+        *,
+        use_zstd: bool = False,
+    ) -> dict:
         """Returns a serialization of the current job instance
 
         You can exclude serializing the `meta` dictionary by setting
@@ -1141,13 +1135,14 @@ class Job:
         Args:
             include_meta (bool, optional): Whether to include the Job's metadata. Defaults to True.
             include_result (bool, optional): Whether to include the Job's result. Defaults to True.
+            use_zstd (bool, optional): Whether to use Zstandard compression. Defaults to False.
 
         Returns:
             dict: The Job serialized as a dictionary
         """
         obj: dict[str, Any] = {
             'created_at': utcformat(self.created_at or now()),
-           'data': _compress(self.data, use_zstd=self.use_zstd),
+            'data': _compress(self.data, use_zstd=use_zstd),
             'success_callback_name': self._success_callback_name if self._success_callback_name else '',
             'failure_callback_name': self._failure_callback_name if self._failure_callback_name else '',
             'stopped_callback_name': self._stopped_callback_name if self._stopped_callback_name else '',
@@ -1192,7 +1187,7 @@ class Job:
         if self._exc_info is not None and include_result:
             obj['exc_info'] = _compress(
                 str(self._exc_info).encode('utf-8'),
-                use_zstd=self.use_zstd,
+                use_zstd=use_zstd,
             )
 
         if self.timeout is not None:
@@ -1228,7 +1223,14 @@ class Job:
         return obj
 
     # TODO: Remove include_result parameter in RQ 3.0 - results are now always saved to Redis streams
-    def save(self, pipeline: Pipeline | None = None, include_meta: bool = True, include_result: bool = True):
+    def save(
+        self,
+        pipeline: Pipeline | None = None,
+        include_meta: bool = True,
+        include_result: bool = True,
+        *,
+        use_zstd: bool = False,
+    ):
         """Dumps the current job instance to its corresponding Redis key.
 
         Exclude saving the `meta` dictionary by setting
@@ -1242,11 +1244,16 @@ class Job:
             include_meta (bool, optional): Whether to include the job's metadata. Defaults to True.
             include_result (bool, optional): Whether to include the job's result. Defaults to True.
                 TODO: Remove this parameter in RQ 3.0 - results are now always saved to Redis streams.
+            use_zstd (bool, optional): Whether to use Zstandard compression. Defaults to False.
         """
         key = self.key
         connection = pipeline if pipeline is not None else self.connection
 
-        mapping = self.to_dict(include_meta=include_meta, include_result=include_result)
+        mapping = self.to_dict(
+            include_meta=include_meta,
+            include_result=include_result,
+            use_zstd=use_zstd,
+        )
         connection.hset(key, mapping=mapping)
 
     def save_meta(self):

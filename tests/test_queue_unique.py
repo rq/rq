@@ -1,10 +1,11 @@
 """Tests for Queue unique job enqueue behavior."""
 
 from datetime import datetime, timedelta, timezone
+from unittest.mock import patch
 
 from rq import Queue
 from rq.exceptions import DuplicateJobError
-from rq.job import JobStatus
+from rq.job import ZSTD_MAGIC, JobStatus, zstd
 from rq.rate_limit import RateLimit
 from rq.scheduler import RQScheduler
 from tests import RQTestCase
@@ -13,6 +14,47 @@ from tests.fixtures import say_hello
 
 class TestEnqueueJobUnique(RQTestCase):
     """Tests for Queue unique enqueue integration."""
+
+    def _assert_zstd_job(self, job):
+        compressed_data = self.connection.hget(job.key, 'data')
+        self.assertTrue(compressed_data.startswith(ZSTD_MAGIC))
+        self.assertEqual(zstd.decompress(compressed_data), job.data)
+
+    def test_unique_async_enqueue_uses_queue_zstd_setting(self):
+        """Unique async enqueue passes the Queue compression setting to its Lua serializer."""
+        if zstd is None:
+            self.skipTest('Zstandard is not available')
+
+        queue = Queue(connection=self.connection, use_zstd=True)
+        job = queue.enqueue(say_hello, job_id='zstd-unique-job', unique=True)
+
+        self._assert_zstd_job(job)
+
+    def test_unique_sync_enqueue_uses_queue_zstd_setting(self):
+        """Unique synchronous enqueue passes the Queue compression setting to its Lua serializer."""
+        if zstd is None:
+            self.skipTest('Zstandard is not available')
+
+        queue = Queue(connection=self.connection, is_async=False, use_zstd=True)
+        # Stop before synchronous execution re-saves the job with Job.save's Zlib default.
+        with patch.object(queue, 'run_sync', side_effect=lambda job: job):
+            job = queue.enqueue(say_hello, job_id='zstd-sync-unique-job', unique=True)
+
+        self._assert_zstd_job(job)
+
+    def test_scheduled_enqueue_uses_queue_zstd_setting(self):
+        """Regular and unique scheduled enqueue persist with the Queue compression setting."""
+        if zstd is None:
+            self.skipTest('Zstandard is not available')
+
+        queue = Queue(connection=self.connection, use_zstd=True)
+        scheduled_time = datetime.now(timezone.utc) + timedelta(hours=1)
+
+        regular_job = queue.enqueue_at(scheduled_time, say_hello, job_id='zstd-scheduled-job')
+        unique_job = queue.enqueue_at(scheduled_time, say_hello, job_id='zstd-unique-scheduled-job', unique=True)
+
+        self._assert_zstd_job(regular_job)
+        self._assert_zstd_job(unique_job)
 
     def test_unique_with_dependencies_raises_exception(self):
         """unique=True with job dependencies raises ValueError."""
