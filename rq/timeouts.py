@@ -82,17 +82,14 @@ class TimerDeathPenalty(BaseDeathPenalty):
         super().__init__(timeout, exception, **kwargs)
         self._target_thread_id = threading.current_thread().ident
         self._timer = None
-        message = f'Task exceeded maximum timeout value ({timeout} seconds)'
 
-        # PyThreadState_SetAsyncExc can only inject a class. A private subclass
-        # carries this penalty's message without replacing JobTimeoutException.__init__.
-        class _Timeout(exception):
-            def __init__(self, *args, **kwargs):  # noqa
-                super().__init__(message)
-
-        _Timeout.__name__ = exception.__name__
-        _Timeout.__qualname__ = exception.__qualname__
-        self._exception = _Timeout
+    def __exit__(self, type, value, traceback):
+        suppress = super().__exit__(type, value, traceback)
+        # PyThreadState_SetAsyncExc can only inject a class, so the raised
+        # instance has no message until the with-block exits.
+        if isinstance(value, self._exception) and not value.args:
+            value.args = (f'Task exceeded maximum timeout value ({self._timeout} seconds)',)
+        return suppress
 
     def new_timer(self):
         """Returns a new timer since timers can only be used once."""

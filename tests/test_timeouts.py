@@ -1,3 +1,4 @@
+import pickle
 import time
 import unittest
 from unittest.mock import patch
@@ -5,6 +6,7 @@ from unittest.mock import patch
 from rq import Queue, SimpleWorker
 from rq.registry import FailedJobRegistry, FinishedJobRegistry
 from rq.timeouts import (
+    JobTimeoutException,
     TimerDeathPenalty,
     UnixSignalDeathPenalty,
     get_default_death_penalty_class,
@@ -72,14 +74,31 @@ class TestTimeouts(RQTestCase):
 
 
 class TestTimerDeathPenaltyIsolatesException(unittest.TestCase):
-    def test_does_not_replace_job_timeout_exception_init(self):
-        from rq.timeouts import JobTimeoutException, TimerDeathPenalty
+    def test_timer_death_penalty_leaves_exception_class_unchanged(self):
+        TimerDeathPenalty(2)
+        self.assertEqual(str(JobTimeoutException('custom message')), 'custom message')
 
-        first = TimerDeathPenalty(5)
-        second = TimerDeathPenalty(9)
-        with self.assertRaises(JobTimeoutException) as caught:
-            raise JobTimeoutException('kept')
-        self.assertEqual(str(caught.exception), 'kept')
-        self.assertIn('5 seconds', str(first._exception()))
-        self.assertIn('9 seconds', str(second._exception()))
-        self.assertIsInstance(first._exception(), JobTimeoutException)
+        with self.assertRaises(JobTimeoutException) as context:
+            with TimerDeathPenalty(1):
+                thread_friendly_sleep_func(3)
+
+        self.assertIs(type(context.exception), JobTimeoutException)
+        self.assertEqual(
+            str(context.exception),
+            'Task exceeded maximum timeout value (1 seconds)',
+        )
+        unpickled = pickle.loads(pickle.dumps(context.exception))
+        self.assertEqual(
+            str(unpickled),
+            'Task exceeded maximum timeout value (1 seconds)',
+        )
+
+        with self.assertRaises(JobTimeoutException) as context:
+            with TimerDeathPenalty(30):
+                with TimerDeathPenalty(1):
+                    thread_friendly_sleep_func(3)
+
+        self.assertEqual(
+            str(context.exception),
+            'Task exceeded maximum timeout value (1 seconds)',
+        )
