@@ -972,6 +972,18 @@ class BaseWorker:
             pipeline.expire(key, self.worker_ttl + 60)
             pipeline.execute()
 
+    def _register_again(self, ttl: int, pipeline: Pipeline):
+        """Writes the worker hash back and adds the worker to its registries again, after its key
+        expired while the worker kept running (e.g. the host was suspended for longer than the TTL).
+
+        `register_birth()` can't be used for this: it resets the birth date and refuses an existing
+        hash without a `death` field, which is what the heartbeat leaves behind.
+        """
+        self.log.info('Worker %s: worker key expired, registering again', self.name)
+        pipeline.hset(self.key, mapping={**self.serialize(), 'state': self._state})
+        pipeline.expire(self.key, ttl)
+        worker_registration.register(self, pipeline)
+
     def register_death(self):
         """Registers its own death."""
         self.log.debug('Worker %s: registering death', self.name)
@@ -1234,9 +1246,15 @@ class BaseWorker:
         timeout = timeout or self.worker_ttl + 60
         connection: Redis | Pipeline = pipeline if pipeline is not None else self.connection
         self.last_heartbeat = now()
-        connection.hset(self.key, 'last_heartbeat', utcformat(self.last_heartbeat))
+        created = connection.hset(self.key, 'last_heartbeat', utcformat(self.last_heartbeat))
         connection.expire(self.key, timeout)
         connection.expire(self.executions_key, timeout)
+        # hset() returns 1 when it creates the field, which means the worker's key had expired.
+        # A pipelined heartbeat can't read the reply here; maintain_heartbeats() checks its own.
+        if pipeline is None and created == 1 and self.birth_date is not None:
+            with self.connection.pipeline() as registration_pipeline:
+                self._register_again(timeout, registration_pipeline)
+                registration_pipeline.execute()
         self.log.debug(
             'Worker %s: sent heartbeat to prevent worker timeout. Next one should arrive in %s seconds.',
             self.name,
@@ -1272,11 +1290,10 @@ class BaseWorker:
                 pipeline.delete(job.key)
 
             # like above, check if the worker's hash expired before `self.heartbeat` was able to
-            # update the expiration. The hash can expire again before this pipeline runs, so the
-            # recreated hash needs its own TTL or it never expires.
+            # update the expiration, and register the worker again if so. The hash can expire again
+            # before this pipeline runs, so the recreated hash needs its own TTL or it never expires.
             if results[0] == 1:
-                pipeline.hset(self.key, mapping=self.serialize())
-                pipeline.expire(self.key, worker_ttl)
+                self._register_again(worker_ttl, pipeline)
 
             pipeline.execute()
 
