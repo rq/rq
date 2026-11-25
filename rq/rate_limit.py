@@ -109,6 +109,29 @@ end
 return 0
 """
 
+MIGRATE_LEGACY_CONFIG_SCRIPT = """
+for i = 1, 2 do
+    if redis.call('TYPE', KEYS[i]).ok == 'hash' then
+        local concurrency = redis.call('HGET', KEYS[i], 'concurrency')
+        if concurrency then
+            if redis.call('EXISTS', KEYS[i + 2]) == 0 then
+                redis.call('HSET', KEYS[i + 2], 'concurrency', concurrency)
+            end
+            redis.call('DEL', KEYS[i])
+        end
+    end
+end
+return 1
+"""
+
+GET_CONCURRENCY_SCRIPT = """
+local concurrency = redis.call('HGET', KEYS[1], 'concurrency')
+if not concurrency and redis.call('TYPE', KEYS[2]).ok == 'hash' then
+    concurrency = redis.call('HGET', KEYS[2], 'concurrency')
+end
+return concurrency
+"""
+
 
 class RateLimitRegistry:
     """Manages the allowed and rate_limited sorted sets for a rate limit key.
@@ -128,18 +151,29 @@ class RateLimitRegistry:
         self._release_script = connection.register_script(RELEASE_AND_ENQUEUE_SCRIPT)
         self._release_stale_script = connection.register_script(RELEASE_STALE_AND_ENQUEUE_SCRIPT)
         self._cleanup_script = connection.register_script(CLEANUP_REGISTRY_SCRIPT)
+        self._migrate_legacy_config_script = connection.register_script(MIGRATE_LEGACY_CONFIG_SCRIPT)
+        self._get_concurrency_script = connection.register_script(GET_CONCURRENCY_SCRIPT)
 
     def register(self, concurrency: int, pipeline: Pipeline) -> None:
         """Register this rate limit key and persist its config."""
         pipeline.sadd(self.rl_keys_key, self.key)
         pipeline.hset(self.config_key, 'concurrency', concurrency)
 
+    def _migrate_legacy_config_collisions(self, pipeline: Pipeline | None = None) -> None:
+        self._migrate_legacy_config_script(
+            keys=[
+                self.allowed_key,
+                self.rate_limited_key,
+                f'{self.config_key}:allowed',
+                f'{self.config_key}:rate_limited',
+            ],
+            client=pipeline,
+        )
+
     @cached_property
     def concurrency(self) -> int:
         """Read and cache the concurrency limit from Redis; return 0 if unset."""
-        value = self.connection.hget(self.config_key, 'concurrency')
-        if value is None and as_text(self.connection.type(self.legacy_config_key)) == 'hash':
-            value = self.connection.hget(self.legacy_config_key, 'concurrency')
+        value = self._get_concurrency_script(keys=[self.config_key, self.legacy_config_key])
         return int(value) if value else 0
 
     @classmethod
@@ -172,22 +206,27 @@ class RateLimitRegistry:
 
     def get_allowed_job_ids(self) -> list[str]:
         """Returns job IDs in the allowed set, ordered by timestamp."""
+        self._migrate_legacy_config_collisions()
         return [as_text(job_id) for job_id in self.connection.zrange(self.allowed_key, 0, -1)]
 
     def get_rate_limited_job_ids(self) -> list[str]:
         """Returns job IDs in the rate_limited set, ordered by timestamp."""
+        self._migrate_legacy_config_collisions()
         return [as_text(job_id) for job_id in self.connection.zrange(self.rate_limited_key, 0, -1)]
 
     def get_allowed_job_count(self) -> int:
         """Returns the number of jobs in the allowed set."""
+        self._migrate_legacy_config_collisions()
         return self.connection.zcard(self.allowed_key)
 
     def get_rate_limited_job_count(self) -> int:
         """Returns the number of jobs in the rate_limited set."""
+        self._migrate_legacy_config_collisions()
         return self.connection.zcard(self.rate_limited_key)
 
     def add_to_rate_limited(self, job_id: str, pipeline: Pipeline, timestamp: float | None = None) -> None:
         """Add a job to the rate_limited set."""
+        self._migrate_legacy_config_collisions(pipeline)
         if timestamp is None:
             timestamp = current_timestamp()
         pipeline.zadd(self.rate_limited_key, {job_id: timestamp})
@@ -212,6 +251,7 @@ class RateLimitRegistry:
         """
         from .queue import Queue
 
+        self._migrate_legacy_config_collisions(pipeline)
         if enqueued_at is None:
             enqueued_at = now()
         timestamp = current_timestamp()
@@ -241,6 +281,7 @@ class RateLimitRegistry:
         """
         from .queue import Queue
 
+        self._migrate_legacy_config_collisions()
         timestamp = current_timestamp()
         result = self._release_script(
             keys=[self.allowed_key, self.rate_limited_key],
@@ -265,6 +306,7 @@ class RateLimitRegistry:
         from .executions import ExecutionRegistry
         from .queue import Queue
 
+        self._migrate_legacy_config_collisions()
         timestamp = current_timestamp()
         executions_key = ExecutionRegistry(job_id, connection=self.connection).key
         result = self._release_stale_script(
@@ -295,6 +337,7 @@ class RateLimitRegistry:
         Returns:
             The promoted job ids; always [] with a pipeline.
         """
+        self._migrate_legacy_config_collisions(pipeline)
         if pipeline is not None:
             pipeline.zrem(self.rate_limited_key, job_id)
             return []
@@ -337,6 +380,7 @@ class RateLimitRegistry:
         in rate_limited (e.g., worker crashed before releasing capacity) or where a
         job left the allowed set holding a slot it should have released.
         """
+        self._migrate_legacy_config_collisions()
         self._release_stale_allowed_jobs()
 
         if self.concurrency and self.acquire_and_enqueue(self.concurrency):
