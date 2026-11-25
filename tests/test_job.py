@@ -5,12 +5,30 @@ import time
 import zlib
 from datetime import datetime, timezone
 from pickle import dumps, loads
+from unittest.mock import patch
 from uuid import uuid4
 
+try:
+    from compression import zstd
+except ImportError:
+    zstd = None
+
 from rq.defaults import CALLBACK_TIMEOUT
-from rq.exceptions import DeserializationError, InvalidJobOperation, NoSuchJobError
+from rq.exceptions import (
+    DeserializationError,
+    InvalidJobOperation,
+    NoSuchJobError,
+    UnsupportedCompressionError,
+)
 from rq.executions import Execution
-from rq.job import Callback, Job, JobStatus, cancel_job, get_current_job
+from rq.job import (
+    ZSTD_MAGIC,
+    Callback,
+    Job,
+    JobStatus,
+    cancel_job,
+    get_current_job,
+)
 from rq.queue import Queue
 from rq.registry import (
     CanceledJobRegistry,
@@ -176,7 +194,9 @@ class TestJob(RQTestCase):
         self.assertEqual(self.connection.type(job.key), b'hash')
 
         # Saving writes pickled job data
-        unpickled_data = loads(zlib.decompress(self.connection.hget(job.key, 'data')))
+        stored_data = self.connection.hget(job.key, 'data')
+        unpickled_data = loads(zlib.decompress(stored_data))
+
         self.assertEqual(unpickled_data[0], 'tests.fixtures.some_calculation')
 
     def test_fetch(self):
@@ -398,14 +418,22 @@ class TestJob(RQTestCase):
 
         # exc_info is stored in compressed format
         exc_info = self.connection.hget(job.key, 'exc_info')
-        self.assertEqual(as_text(zlib.decompress(exc_info)), exception_string)
-
+        self.assertEqual(
+            as_text(zlib.decompress(exc_info)),
+            exception_string,
+        )
         job.refresh()
         self.assertEqual(job.exc_info, exception_string)
 
         # Uncompressed exc_info is also handled
         self.connection.hset(job.key, 'exc_info', exception_string)
 
+        job.refresh()
+        self.assertEqual(job.exc_info, exception_string)
+
+        # Legacy Zlib-compressed exception info is also supported.
+        legacy_exc_info = zlib.compress(exception_string.encode('utf-8'))
+        self.connection.hset(job.key, 'exc_info', legacy_exc_info)
         job.refresh()
         self.assertEqual(job.exc_info, exception_string)
 
@@ -417,11 +445,101 @@ class TestJob(RQTestCase):
 
         # Job data is stored in compressed format
         job_data = job.data
-        self.assertEqual(zlib.compress(job_data), self.connection.hget(job.key, 'data'))
-
+        self.assertEqual(
+            zlib.decompress(self.connection.hget(job.key, 'data')),
+            job_data,
+        )
         self.connection.hset(job.key, 'data', job_data)
         job.refresh()
         self.assertEqual(job.data, job_data)
+        # Legacy Zlib-compressed data is also supported.
+        legacy_data = zlib.compress(job_data)
+        self.connection.hset(job.key, 'data', legacy_data)
+
+        job.refresh()
+        self.assertEqual(job.data, job_data)
+
+    def test_zstd_compression_opt_in(self):
+        """Job.save supports explicit Zstandard compression for data and exception info."""
+        if zstd is None:
+            self.skipTest('Zstandard is not available')
+
+        exception_string = 'Test exception information'
+
+        job = Job.create(
+            func=fixtures.say_hello,
+            args=('Lionel',),
+            connection=self.connection,
+        )
+        job._exc_info = exception_string
+        job.save(use_zstd=True)
+
+        compressed_data = self.connection.hget(job.key, 'data')
+        self.assertEqual(zstd.decompress(compressed_data), job.data)
+        self.assertTrue(compressed_data.startswith(ZSTD_MAGIC))
+
+        compressed_exc_info = self.connection.hget(job.key, 'exc_info')
+        self.assertEqual(
+            zstd.decompress(compressed_exc_info).decode('utf-8'),
+            exception_string,
+        )
+
+    def test_zstd_compression_with_custom_job_class(self):
+        """Custom Job constructor signatures remain compatible with explicit Zstandard saves."""
+
+        if zstd is None:
+            self.skipTest('Zstandard is not available')
+
+        class CustomJob(Job):
+            def __init__(self, id=None, connection=None, serializer=None):
+                super().__init__(id, connection, serializer)
+
+        job = CustomJob.create(
+            func=fixtures.say_hello,
+            args=('Lionel',),
+            connection=self.connection,
+        )
+
+        self.assertIsInstance(job, CustomJob)
+        self.assertFalse(hasattr(job, 'use_zstd'))
+        job.save(use_zstd=True)
+
+        compressed_data = self.connection.hget(job.key, 'data')
+        self.assertEqual(zstd.decompress(compressed_data), job.data)
+
+    def test_zstd_data_requires_zstd_support(self):
+        """Restoring a Zstandard job reports a clear error without support."""
+        zstd_data = ZSTD_MAGIC + b'test payload'
+        job = Job.create(func=fixtures.say_hello, connection=self.connection)
+        job.save()
+        self.connection.hset(job.key, 'data', zstd_data)
+
+        with patch('rq.job.zstd', None):
+            with self.assertRaisesRegex(UnsupportedCompressionError, 'Cannot decompress Zstandard data'):
+                Job.fetch(job.id, connection=self.connection)
+
+    def test_restoring_zstd_job_does_not_store_compression_state(self):
+        """Restored jobs decompress Zstandard data without retaining compression state."""
+        if zstd is None:
+            self.skipTest('Zstandard is not available')
+
+        job = Job.create(
+            func=fixtures.say_hello,
+            args=('Lionel',),
+            connection=self.connection,
+        )
+        job.save(use_zstd=True)
+
+        restored_job = Job.fetch(job.id, connection=self.connection)
+
+        self.assertFalse(hasattr(restored_job, 'use_zstd'))
+        self.assertEqual(restored_job.data, job.data)
+
+        # A later save uses the backward-compatible Zlib default.
+        restored_job.save()
+
+        compressed_data = self.connection.hget(restored_job.key, 'data')
+        self.assertEqual(zlib.decompress(compressed_data), job.data)
 
     def test_custom_meta_is_persisted(self):
         """Additional meta data on jobs are stored persisted correctly."""
@@ -434,6 +552,19 @@ class TestJob(RQTestCase):
 
         job2 = Job.fetch(job.id, connection=self.connection)
         self.assertEqual(job2.meta['foo'], 'bar')
+
+    def test_save_supports_legacy_to_dict_override(self):
+        """Default saves call custom to_dict overrides with their existing signature."""
+
+        class LegacyToDictJob(Job):
+            def to_dict(self, include_meta=True, include_result=True):
+                return super().to_dict(include_meta, include_result)
+
+        job = LegacyToDictJob.create(func=fixtures.say_hello, connection=self.connection)
+        job.save()
+
+        compressed_data = self.connection.hget(job.key, 'data')
+        self.assertEqual(zlib.decompress(compressed_data), job.data)
 
     def test_get_meta(self):
         """Test get_meta() function"""

@@ -267,6 +267,22 @@ $ rq worker --serializer json
 $ rq worker --serializer rq.serializers.JSONSerializer
 ```
 
+## Compressing Stored Job Data
+
+RQ uses Zlib to compress job data and exception information by default. To use Zstandard when enqueueing jobs, pass
+`use_zstd=True` to `Queue`:
+
+```python
+queue = Queue(connection=connection, use_zstd=True)
+job = queue.enqueue('my_module.count_words', 'https://example.com')
+```
+
+For a direct save, pass `job.save(use_zstd=True)`. This setting applies per write; calls to `Job.save()` without it use
+Zlib, restored jobs do not retain compression state, and existing Zlib-compressed jobs remain readable.
+
+Ensure all workers run Python >= 3.14 before enqueueing jobs using Zstandard compression.
+
+
 ## Accessing The "current" Job from within the job function
 
 Since job functions are regular Python functions, you must retrieve the

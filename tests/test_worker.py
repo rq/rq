@@ -21,7 +21,8 @@ import redis.exceptions
 from rq import Queue, SimpleWorker, Worker
 from rq.connections import get_connection_kwargs
 from rq.defaults import DEFAULT_MAINTENANCE_TASK_INTERVAL, DEFAULT_WORKER_TTL
-from rq.job import Job, JobStatus, Retry
+from rq.exceptions import UnsupportedCompressionError
+from rq.job import ZSTD_MAGIC, Job, JobStatus, Retry, zstd
 from rq.registry import FailedJobRegistry, FinishedJobRegistry, StartedJobRegistry
 from rq.results import Result
 from rq.serializers import JSONSerializer
@@ -395,6 +396,35 @@ class TestWorker(RQTestCase):
 
         # An exception should be logged here at ERROR level
         self.assertIn('DeserializationError', mock_logger_error.call_args[0][3])
+
+    def test_worker_executes_zstd_job(self):
+        """A worker executes a Zstandard-compressed job when Zstandard is available."""
+        if zstd is None:
+            self.skipTest('Zstandard is not available')
+
+        queue = Queue('zstd-worker-exec', connection=self.connection, use_zstd=True)
+        job = queue.enqueue(say_hello, 'Lionel')
+        worker = Worker([queue], connection=self.connection)
+
+        self.assertTrue(worker.work(burst=True))
+        self.assertEqual(job.get_status(refresh=True), JobStatus.FINISHED)
+
+    def test_worker_fails_when_zstd_is_unavailable(self):
+        """A worker raises UnsupportedCompressionError when dequeuing a Zstandard job without support."""
+        queue = Queue('zstd-worker-unsupported', connection=self.connection)
+        job = Job.create(func=say_hello, origin=queue.name, connection=self.connection)
+        job.save()
+        self.connection.hset(job.key, 'data', ZSTD_MAGIC + b'payload')
+        queue.push_job_id(job.id)
+
+        worker = Worker([queue], connection=self.connection)
+        with mock.patch('rq.job.zstd', None):
+            with self.assertRaises(UnsupportedCompressionError):
+                worker.dequeue_job_and_maintain_ttl(10)
+
+        queue.push_job_id(job.id)
+        with mock.patch('rq.job.zstd', None):
+            self.assertFalse(Worker([queue], connection=self.connection).work(burst=True))
 
     def test_heartbeat(self):
         """Heartbeat saves last_heartbeat"""

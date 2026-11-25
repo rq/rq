@@ -190,6 +190,7 @@ class Queue:
         job_class: str | type[Job] | None = None,
         serializer: Serializer | str | None = None,
         death_penalty_class: type[BaseDeathPenalty] | None = UnixSignalDeathPenalty,
+        use_zstd: bool = False,
         **kwargs,
     ):
         """Initializes a Queue object.
@@ -205,6 +206,8 @@ class Queue:
             serializer (Optional[Union[Serializer, str]], optional): Serializer. Defaults to None.
             death_penalty_class (Type[BaseDeathPenalty, optional): Job class or a string referencing the Job class path.
                 Defaults to UnixSignalDeathPenalty.
+            use_zstd (bool, optional): Whether to use Zstandard compression for jobs.
+                Defaults to False.
         """
         if not connection:
             raise TypeError("Queue() missing 1 required positional argument: 'connection'")
@@ -229,6 +232,7 @@ class Queue:
         self.death_penalty_class = death_penalty_class  # type: ignore[assignment]
 
         self.serializer = resolve_serializer(serializer)
+        self.use_zstd = use_zstd
         self.redis_server_version: tuple[int, int, int] | None = None
 
     def __len__(self):
@@ -706,7 +710,7 @@ class Queue:
                             # to be set back to their original values in the handling of WatchError below!
                             job.set_status(JobStatus.DEFERRED, pipeline=pipe)
                             job.register_dependency(pipeline=pipe)
-                            job.save(pipeline=pipe)
+                            self._save_job(job, pipeline=pipe)
                             job.cleanup(ttl=job.ttl, pipeline=pipe)
                             if pipeline is None:
                                 pipe.execute()
@@ -967,7 +971,7 @@ class Queue:
                 for job_data in job_datas_with_dependencies
             ]
             for job in jobs_with_dependencies:
-                job.save(pipeline=pipe)
+                self._save_job(job, pipeline=pipe)
             if pipeline is None:
                 pipe.execute()
 
@@ -1225,7 +1229,7 @@ class Queue:
         if unique:
             job._status = JobStatus.SCHEDULED
             # Atomic: check uniqueness, save job, add to scheduled registry, register queue
-            schedule_unique_job(self.connection, self.key, registry.key, job, datetime)
+            schedule_unique_job(self.connection, self.key, registry.key, job, datetime, use_zstd=self.use_zstd)
             return job
 
         pipe = pipeline if pipeline is not None else self.connection.pipeline()
@@ -1340,7 +1344,7 @@ class Queue:
             job.enqueue_at_front = True
         pipe = pipeline if pipeline is not None else self.connection.pipeline()
         registry.register(job.rate_limit_concurrency, pipe)
-        job.save(pipeline=pipe)
+        self._save_job(job, pipeline=pipe)
         job.cleanup(ttl=job.ttl, pipeline=pipe)
         registry.add_to_rate_limited(job.id, pipe)
 
@@ -1405,8 +1409,19 @@ class Queue:
             status (JobStatus): The job status to set. Defaults to JobStatus.QUEUED.
         """
         job.set_status(status, pipeline=pipeline)
-        job.save(pipeline=pipeline)
+        self._save_job(job, pipeline=pipeline)
         job.cleanup(ttl=job.ttl, pipeline=pipeline)
+
+    def _save_job(self, job: Job, pipeline: Pipeline) -> None:
+        """Save a job, passing the compression option only when enabled.
+
+        Keeping the default call shape preserves compatibility with custom Job
+        subclasses that override save() without a use_zstd keyword argument.
+        """
+        if self.use_zstd:
+            job.save(pipeline=pipeline, use_zstd=True)
+        else:
+            job.save(pipeline=pipeline)
 
     def _enqueue_async_job(
         self, job: Job, pipeline: Pipeline | None = None, at_front: bool = False, unique: bool = False
@@ -1431,7 +1446,7 @@ class Queue:
         if unique:
             # Use atomic Lua script for unique enqueue (check + save + push)
             # Note: pipeline is ignored when unique=True because the Lua script is atomic
-            save_unique_job(self.connection, self.key, job, at_front=at_front)
+            save_unique_job(self.connection, self.key, job, at_front=at_front, use_zstd=self.use_zstd)
         else:
             pipe = pipeline if pipeline is not None else self.connection.pipeline()
 
@@ -1464,7 +1479,7 @@ class Queue:
 
         if unique:
             # Use atomic Lua script for unique check and save (without pushing to queue)
-            save_unique_job(self.connection, self.key, job, enqueue=False)
+            save_unique_job(self.connection, self.key, job, enqueue=False, use_zstd=self.use_zstd)
         else:
             pipe = pipeline if pipeline is not None else self.connection.pipeline()
 

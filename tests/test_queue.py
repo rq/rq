@@ -1,10 +1,11 @@
 import json
+import zlib
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 from rq import Queue, Retry
 from rq.exceptions import DuplicateJobError
-from rq.job import Job, JobStatus
+from rq.job import ZSTD_MAGIC, Job, JobStatus, zstd
 from rq.registry import (
     CanceledJobRegistry,
     DeferredJobRegistry,
@@ -42,6 +43,99 @@ class TestQueue(RQTestCase):
         q = Queue('my-queue', connection=self.connection)
         self.assertEqual(q.name, 'my-queue')
         self.assertEqual(str(q), '<Queue my-queue>')
+
+    def test_enqueue_job_uses_zlib_by_default(self):
+        """Queue enqueue keeps Zlib as the default compression format."""
+        queue = Queue('default-compression-queue', connection=self.connection)
+        job = queue.enqueue(echo, 'hello')
+
+        self.assertEqual(zlib.decompress(self.connection.hget(job.key, 'data')), job.data)
+
+    def test_enqueue_job_with_zstd(self):
+        """Jobs enqueued through a Zstandard-enabled queue use Zstandard."""
+        if zstd is None:
+            self.skipTest('Zstandard is not available')
+
+        queue = Queue('zstd-queue', connection=self.connection, use_zstd=True)
+        job = queue.enqueue(echo, 'hello')
+
+        compressed_data = self.connection.hget(job.key, 'data')
+        self.assertTrue(compressed_data.startswith(ZSTD_MAGIC))
+        self.assertEqual(zstd.decompress(compressed_data), job.data)
+
+    def test_enqueue_deferred_job_with_zstd(self):
+        """Dependency deferral persists job data using the Queue compression setting."""
+        if zstd is None:
+            self.skipTest('Zstandard is not available')
+
+        queue = Queue('zstd-deferred-queue', connection=self.connection, use_zstd=True)
+        parent = queue.enqueue(say_hello)
+        job = queue.enqueue(say_hello, depends_on=parent)
+
+        self.assertEqual(job.get_status(), JobStatus.DEFERRED)
+        compressed_data = self.connection.hget(job.key, 'data')
+        self.assertEqual(zstd.decompress(compressed_data), job.data)
+
+    def test_enqueue_many_deferred_job_with_zstd(self):
+        """enqueue_many persists dependent job data using the Queue compression setting."""
+        if zstd is None:
+            self.skipTest('Zstandard is not available')
+
+        queue = Queue('zstd-enqueue-many-queue', connection=self.connection, use_zstd=True)
+        parent = queue.enqueue(say_hello)
+        job_data = Queue.prepare_data(say_hello, job_id='zstd-enqueue-many-job', depends_on=parent)
+
+        (job,) = queue.enqueue_many([job_data])
+
+        self.assertEqual(job.get_status(), JobStatus.DEFERRED)
+        compressed_data = self.connection.hget(job.key, 'data')
+        self.assertEqual(zstd.decompress(compressed_data), job.data)
+
+    def test_custom_job_constructor_with_zstd_queue(self):
+        """Queue compression does not add arguments to custom Job constructors."""
+        if zstd is None:
+            self.skipTest('Zstandard is not available')
+
+        class CustomJob(Job):
+            def __init__(self, id=None, connection=None, serializer=None):
+                super().__init__(id, connection, serializer)
+
+        queue = Queue('zstd-custom-job-queue', connection=self.connection, job_class=CustomJob, use_zstd=True)
+        job = queue.enqueue(echo, 'hello')
+
+        self.assertIsInstance(job, CustomJob)
+        self.assertFalse(hasattr(job, 'use_zstd'))
+        self.assertEqual(zstd.decompress(self.connection.hget(job.key, 'data')), job.data)
+
+    def test_queue_persistence_supports_legacy_save_override(self):
+        """Default Queue persistence keeps the previous Job.save() call signature."""
+
+        class LegacySaveJob(Job):
+            def save(self, pipeline=None, include_meta=True, include_result=True):
+                return super().save(pipeline=pipeline, include_meta=include_meta, include_result=include_result)
+
+        queue = Queue('legacy-save-queue', connection=self.connection, job_class=LegacySaveJob)
+
+        def assert_zlib_payload(job):
+            self.assertEqual(zlib.decompress(self.connection.hget(job.key, 'data')), job.data)
+
+        ordinary_job = queue.enqueue(echo, 'ordinary')
+        assert_zlib_payload(ordinary_job)
+
+        parent = queue.enqueue(say_hello)
+        deferred_job = queue.enqueue(say_hello, depends_on=parent)
+        self.assertEqual(deferred_job.get_status(), JobStatus.DEFERRED)
+        assert_zlib_payload(deferred_job)
+
+        many_parent = queue.enqueue(say_hello)
+        deferred_many_data = Queue.prepare_data(say_hello, job_id='legacy-save-many', depends_on=many_parent)
+        (deferred_many_job,) = queue.enqueue_many([deferred_many_data])
+        self.assertEqual(deferred_many_job.get_status(), JobStatus.DEFERRED)
+        assert_zlib_payload(deferred_many_job)
+
+        scheduled_job = queue.enqueue_at(datetime.now(timezone.utc) + timedelta(minutes=1), echo, 'scheduled')
+        self.assertEqual(scheduled_job.get_status(), JobStatus.SCHEDULED)
+        assert_zlib_payload(scheduled_job)
 
     def test_create_queue_with_serializer(self):
         """Creating queues with serializer."""

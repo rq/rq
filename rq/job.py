@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import importlib
 import json
 import logging
 import re
@@ -14,6 +15,11 @@ from typing import TYPE_CHECKING, Any, cast
 from uuid import uuid4
 
 from redis import WatchError
+
+try:
+    zstd: Any = importlib.import_module('compression.zstd')
+except ImportError:
+    zstd = None
 
 from .defaults import CALLBACK_TIMEOUT, RQ_KEY_PREFIX, UNSERIALIZABLE_RETURN_VALUE_PAYLOAD
 from .types import FailureCallbackType, SuccessCallbackType
@@ -33,7 +39,7 @@ if TYPE_CHECKING:
 
 
 from .callbacks import Callback
-from .exceptions import DeserializationError, InvalidJobOperation, NoSuchJobError
+from .exceptions import DeserializationError, InvalidJobOperation, NoSuchJobError, UnsupportedCompressionError
 from .serializers import resolve_serializer
 from .types import FunctionReferenceType, JobDependencyType
 from .utils import (
@@ -49,6 +55,36 @@ from .utils import (
     utcformat,
 )
 from .webhook import Webhook
+
+ZSTD_MAGIC = b'\x28\xb5\x2f\xfd'
+
+
+def _compress(data: bytes, use_zstd: bool = False) -> bytes:
+    """Compress data using Zlib by default or Zstandard when enabled."""
+    if use_zstd:
+        if zstd is None:
+            raise RuntimeError('Zstandard compression requires Python 3.14 or newer.')
+        return zstd.compress(data)
+
+    return zlib.compress(data)
+
+
+def _decompress(data: bytes) -> bytes:
+    """Decompress Zstandard, Zlib, or legacy uncompressed data."""
+    if data.startswith(ZSTD_MAGIC) and zstd is None:
+        raise UnsupportedCompressionError('Cannot decompress Zstandard data without Zstandard support.')
+    if zstd is not None:
+        try:
+            return zstd.decompress(data)
+        except zstd.ZstdError:
+            pass
+
+    try:
+        return zlib.decompress(data)
+    except zlib.error:
+        # Support legacy uncompressed data.
+        return data
+
 
 logger = logging.getLogger('rq.job')
 
@@ -976,12 +1012,7 @@ class Job:
             raw_data = obj['data']
         except KeyError:
             raise NoSuchJobError(f'Unexpected job format: {obj}')
-
-        try:
-            self.data = zlib.decompress(raw_data)
-        except zlib.error:
-            # Fallback to uncompressed string
-            self.data = raw_data
+        self.data = _decompress(raw_data)
 
         self.created_at = str_to_date(v) if (v := obj.get('created_at')) else now()
         self.origin = as_text(obj['origin']) if obj.get('origin') else ''
@@ -1066,11 +1097,7 @@ class Job:
 
         raw_exc_info = obj.get('exc_info')
         if raw_exc_info:
-            try:
-                self._exc_info = as_text(zlib.decompress(raw_exc_info))
-            except zlib.error:
-                # Fallback to uncompressed string
-                self._exc_info = as_text(raw_exc_info)
+            self._exc_info = as_text(_decompress(raw_exc_info))
 
     # Persistence
     def refresh(self):  # noqa
@@ -1084,7 +1111,13 @@ class Job:
             raise NoSuchJobError(f'No such job: {self.key}')
         self.restore(data)
 
-    def to_dict(self, include_meta: bool = True, include_result: bool = True) -> dict:
+    def to_dict(
+        self,
+        include_meta: bool = True,
+        include_result: bool = True,
+        *,
+        use_zstd: bool = False,
+    ) -> dict:
         """Returns a serialization of the current job instance
 
         You can exclude serializing the `meta` dictionary by setting
@@ -1093,13 +1126,14 @@ class Job:
         Args:
             include_meta (bool, optional): Whether to include the Job's metadata. Defaults to True.
             include_result (bool, optional): Whether to include the Job's result. Defaults to True.
+            use_zstd (bool, optional): Whether to use Zstandard compression. Defaults to False.
 
         Returns:
             dict: The Job serialized as a dictionary
         """
         obj: dict[str, Any] = {
             'created_at': utcformat(self.created_at or now()),
-            'data': zlib.compress(self.data),
+            'data': _compress(self.data, use_zstd=use_zstd),
             'success_callback_name': self._success_callback_name if self._success_callback_name else '',
             'failure_callback_name': self._failure_callback_name if self._failure_callback_name else '',
             'stopped_callback_name': self._stopped_callback_name if self._stopped_callback_name else '',
@@ -1142,7 +1176,11 @@ class Job:
             except:  # noqa
                 obj['result'] = 'Unserializable return value'
         if self._exc_info is not None and include_result:
-            obj['exc_info'] = zlib.compress(str(self._exc_info).encode('utf-8'))
+            obj['exc_info'] = _compress(
+                str(self._exc_info).encode('utf-8'),
+                use_zstd=use_zstd,
+            )
+
         if self.timeout is not None:
             obj['timeout'] = self.timeout
         if self._success_callback_timeout is not None:
@@ -1176,7 +1214,14 @@ class Job:
         return obj
 
     # TODO: Remove include_result parameter in RQ 3.0 - results are now always saved to Redis streams
-    def save(self, pipeline: Pipeline | None = None, include_meta: bool = True, include_result: bool = True):
+    def save(
+        self,
+        pipeline: Pipeline | None = None,
+        include_meta: bool = True,
+        include_result: bool = True,
+        *,
+        use_zstd: bool = False,
+    ):
         """Dumps the current job instance to its corresponding Redis key.
 
         Exclude saving the `meta` dictionary by setting
@@ -1190,11 +1235,19 @@ class Job:
             include_meta (bool, optional): Whether to include the job's metadata. Defaults to True.
             include_result (bool, optional): Whether to include the job's result. Defaults to True.
                 TODO: Remove this parameter in RQ 3.0 - results are now always saved to Redis streams.
+            use_zstd (bool, optional): Whether to use Zstandard compression. Defaults to False.
         """
         key = self.key
         connection = pipeline if pipeline is not None else self.connection
 
-        mapping = self.to_dict(include_meta=include_meta, include_result=include_result)
+        if use_zstd:
+            mapping = self.to_dict(
+                include_meta=include_meta,
+                include_result=include_result,
+                use_zstd=True,
+            )
+        else:
+            mapping = self.to_dict(include_meta=include_meta, include_result=include_result)
         connection.hset(key, mapping=mapping)
 
     def save_meta(self):
