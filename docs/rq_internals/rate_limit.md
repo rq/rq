@@ -58,7 +58,7 @@ resolved dependents behave identically.
 Everything lives in `rq/rate_limit.py` (`RateLimit`, `RateLimitRegistry`). Each rate
 limit key has one registry, stored as:
 
-- `rq:rl:{key}` — config hash, stores `concurrency`.
+- `rq:rl-config:{key}` — config hash, stores `concurrency`.
 - `rq:rl:{key}:allowed` — sorted set of jobs holding a slot, scored by acquire time.
 - `rq:rl:{key}:rate_limited` — sorted set of waiting jobs, scored by enqueue time, so
   `ZPOPMIN` promotes oldest-first.
