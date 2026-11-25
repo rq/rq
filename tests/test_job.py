@@ -553,6 +553,19 @@ class TestJob(RQTestCase):
         job2 = Job.fetch(job.id, connection=self.connection)
         self.assertEqual(job2.meta['foo'], 'bar')
 
+    def test_save_supports_legacy_to_dict_override(self):
+        """Default saves call custom to_dict overrides with their existing signature."""
+
+        class LegacyToDictJob(Job):
+            def to_dict(self, include_meta=True, include_result=True):
+                return super().to_dict(include_meta, include_result)
+
+        job = LegacyToDictJob.create(func=fixtures.say_hello, connection=self.connection)
+        job.save()
+
+        compressed_data = self.connection.hget(job.key, 'data')
+        self.assertEqual(zlib.decompress(compressed_data), job.data)
+
     def test_get_meta(self):
         """Test get_meta() function"""
         job = Job.create(func=fixtures.say_hello, args=('Lionel',), connection=self.connection)

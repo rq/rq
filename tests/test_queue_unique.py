@@ -1,11 +1,12 @@
 """Tests for Queue unique job enqueue behavior."""
 
+import zlib
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 from rq import Queue
 from rq.exceptions import DuplicateJobError
-from rq.job import ZSTD_MAGIC, JobStatus, zstd
+from rq.job import ZSTD_MAGIC, Job, JobStatus, zstd
 from rq.rate_limit import RateLimit
 from rq.scheduler import RQScheduler
 from tests import RQTestCase
@@ -55,6 +56,20 @@ class TestEnqueueJobUnique(RQTestCase):
 
         self._assert_zstd_job(regular_job)
         self._assert_zstd_job(unique_job)
+
+    def test_unique_enqueue_supports_legacy_to_dict_override(self):
+        """Unique serialization preserves the old to_dict override signature by default."""
+
+        class LegacyToDictJob(Job):
+            def to_dict(self, include_meta=True, include_result=True):
+                return super().to_dict(include_meta, include_result)
+
+        queue = Queue(connection=self.connection, job_class=LegacyToDictJob)
+        job = queue.enqueue(say_hello, job_id='legacy-to-dict-unique-job', unique=True)
+
+        compressed_data = self.connection.hget(job.key, 'data')
+        self.assertEqual(zlib.decompress(compressed_data), job.data)
+        self.assertEqual(queue.get_job_ids(), [job.id])
 
     def test_unique_with_dependencies_raises_exception(self):
         """unique=True with job dependencies raises ValueError."""

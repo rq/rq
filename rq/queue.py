@@ -28,7 +28,7 @@ if TYPE_CHECKING:
 from .callbacks import Callback, execute_failure_callback, execute_success_callback
 from .defaults import DEFAULT_RESULT_TTL, RQ_KEY_PREFIX
 from .dependency import Dependency
-from .exceptions import DequeueTimeout, NoSuchJobError, UnsupportedCompressionError
+from .exceptions import DequeueTimeout, NoSuchJobError
 from .intermediate_queue import IntermediateQueue
 from .job import Job, JobStatus
 from .job_lifecycle import format_exc_info, record_job_failure
@@ -710,7 +710,7 @@ class Queue:
                             # to be set back to their original values in the handling of WatchError below!
                             job.set_status(JobStatus.DEFERRED, pipeline=pipe)
                             job.register_dependency(pipeline=pipe)
-                            job.save(pipeline=pipe, use_zstd=self.use_zstd)
+                            self._save_job(job, pipeline=pipe)
                             job.cleanup(ttl=job.ttl, pipeline=pipe)
                             if pipeline is None:
                                 pipe.execute()
@@ -971,7 +971,7 @@ class Queue:
                 for job_data in job_datas_with_dependencies
             ]
             for job in jobs_with_dependencies:
-                job.save(pipeline=pipe, use_zstd=self.use_zstd)
+                self._save_job(job, pipeline=pipe)
             if pipeline is None:
                 pipe.execute()
 
@@ -1344,7 +1344,7 @@ class Queue:
             job.enqueue_at_front = True
         pipe = pipeline if pipeline is not None else self.connection.pipeline()
         registry.register(job.rate_limit_concurrency, pipe)
-        job.save(pipeline=pipe, use_zstd=self.use_zstd)
+        self._save_job(job, pipeline=pipe)
         job.cleanup(ttl=job.ttl, pipeline=pipe)
         registry.add_to_rate_limited(job.id, pipe)
 
@@ -1409,8 +1409,19 @@ class Queue:
             status (JobStatus): The job status to set. Defaults to JobStatus.QUEUED.
         """
         job.set_status(status, pipeline=pipeline)
-        job.save(pipeline=pipeline, use_zstd=self.use_zstd)
+        self._save_job(job, pipeline=pipeline)
         job.cleanup(ttl=job.ttl, pipeline=pipeline)
+
+    def _save_job(self, job: Job, pipeline: Pipeline) -> None:
+        """Save a job, passing the compression option only when enabled.
+
+        Keeping the default call shape preserves compatibility with custom Job
+        subclasses that override save() without a use_zstd keyword argument.
+        """
+        if self.use_zstd:
+            job.save(pipeline=pipeline, use_zstd=True)
+        else:
+            job.save(pipeline=pipeline)
 
     def _enqueue_async_job(
         self, job: Job, pipeline: Pipeline | None = None, at_front: bool = False, unique: bool = False
@@ -1832,10 +1843,6 @@ class Queue:
             # Silently pass on jobs that don't exist (anymore)
             return None
         except Exception as e:
-            if isinstance(e, UnsupportedCompressionError):
-                # The ID has already been removed from the ready queue. Return
-                # restore failures to the queue so other workers can recover it.
-                queue.intermediate_queue.requeue(job_id)
             # Attach queue information on the exception for improved error
             # reporting
             e.job_id = job_id  # type: ignore[attr-defined]

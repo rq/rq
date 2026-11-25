@@ -212,12 +212,7 @@ class Job:
     _dependency: Job | None
     redis_job_namespace_prefix = RQ_KEY_PREFIX + ':job:'
 
-    def __init__(
-        self,
-        id: str | None = None,
-        connection: Redis | None = None,
-        serializer=None,
-    ):
+    def __init__(self, id: str | None = None, connection: Redis | None = None, serializer=None):
         # Manually check for the presence of the connection argument to preserve
         # backwards compatibility during the transition to RQ v2.0.0.
         if not connection:
@@ -368,11 +363,7 @@ class Job:
         if kwargs is None:
             kwargs = {}
 
-        job = cls(
-            connection=connection,
-            serializer=serializer,
-        )
-
+        job = cls(connection=connection, serializer=serializer)
         if id is not None:
             job.id = id
 
@@ -1249,11 +1240,14 @@ class Job:
         key = self.key
         connection = pipeline if pipeline is not None else self.connection
 
-        mapping = self.to_dict(
-            include_meta=include_meta,
-            include_result=include_result,
-            use_zstd=use_zstd,
-        )
+        if use_zstd:
+            mapping = self.to_dict(
+                include_meta=include_meta,
+                include_result=include_result,
+                use_zstd=True,
+            )
+        else:
+            mapping = self.to_dict(include_meta=include_meta, include_result=include_result)
         connection.hset(key, mapping=mapping)
 
     def save_meta(self):

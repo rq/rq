@@ -139,7 +139,7 @@ UNIQUE_SCHEDULE_SCRIPT = """
 
 def _build_hset_args(job, use_zstd: bool = False):
     """Build flat list of field/value pairs from job.to_dict() for use in Lua HSET calls."""
-    job_data = job.to_dict(use_zstd=use_zstd)
+    job_data = job.to_dict(use_zstd=True) if use_zstd else job.to_dict()
     hset_args = []
     for key, value in job_data.items():
         if value is not None:

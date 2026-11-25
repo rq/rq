@@ -107,6 +107,36 @@ class TestQueue(RQTestCase):
         self.assertFalse(hasattr(job, 'use_zstd'))
         self.assertEqual(zstd.decompress(self.connection.hget(job.key, 'data')), job.data)
 
+    def test_queue_persistence_supports_legacy_save_override(self):
+        """Default Queue persistence keeps the previous Job.save() call signature."""
+
+        class LegacySaveJob(Job):
+            def save(self, pipeline=None, include_meta=True, include_result=True):
+                return super().save(pipeline=pipeline, include_meta=include_meta, include_result=include_result)
+
+        queue = Queue('legacy-save-queue', connection=self.connection, job_class=LegacySaveJob)
+
+        def assert_zlib_payload(job):
+            self.assertEqual(zlib.decompress(self.connection.hget(job.key, 'data')), job.data)
+
+        ordinary_job = queue.enqueue(echo, 'ordinary')
+        assert_zlib_payload(ordinary_job)
+
+        parent = queue.enqueue(say_hello)
+        deferred_job = queue.enqueue(say_hello, depends_on=parent)
+        self.assertEqual(deferred_job.get_status(), JobStatus.DEFERRED)
+        assert_zlib_payload(deferred_job)
+
+        many_parent = queue.enqueue(say_hello)
+        deferred_many_data = Queue.prepare_data(say_hello, job_id='legacy-save-many', depends_on=many_parent)
+        (deferred_many_job,) = queue.enqueue_many([deferred_many_data])
+        self.assertEqual(deferred_many_job.get_status(), JobStatus.DEFERRED)
+        assert_zlib_payload(deferred_many_job)
+
+        scheduled_job = queue.enqueue_at(datetime.now(timezone.utc) + timedelta(minutes=1), echo, 'scheduled')
+        self.assertEqual(scheduled_job.get_status(), JobStatus.SCHEDULED)
+        assert_zlib_payload(scheduled_job)
+
     def test_create_queue_with_serializer(self):
         """Creating queues with serializer."""
         q = Queue('queue-with-serializer', connection=self.connection, serializer=json)
