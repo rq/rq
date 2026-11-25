@@ -95,12 +95,15 @@ end
 
 # Lua: if both allowed and rate_limited sets are empty, drop the key from rq:rl-keys
 # and delete the config hash and sorted sets. Returns 1 if cleaned up, 0 if not empty.
-# KEYS: allowed_key, rate_limited_key, config_key, rl_keys_key
+# KEYS: allowed_key, rate_limited_key, config_key, rl_keys_key, legacy_config_key
 # ARGV: key
 CLEANUP_REGISTRY_SCRIPT = """
 if redis.call('ZCARD', KEYS[1]) == 0 and redis.call('ZCARD', KEYS[2]) == 0 then
     redis.call('SREM', KEYS[4], ARGV[1])
     redis.call('DEL', KEYS[1], KEYS[2], KEYS[3])
+    if redis.call('TYPE', KEYS[5]).ok == 'hash' then
+        redis.call('DEL', KEYS[5])
+    end
     return 1
 end
 return 0
@@ -135,6 +138,8 @@ class RateLimitRegistry:
     def concurrency(self) -> int:
         """Read and cache the concurrency limit from Redis; return 0 if unset."""
         value = self.connection.hget(self.config_key, 'concurrency')
+        if value is None and as_text(self.connection.type(self.legacy_config_key)) == 'hash':
+            value = self.connection.hget(self.legacy_config_key, 'concurrency')
         return int(value) if value else 0
 
     @classmethod
@@ -151,6 +156,10 @@ class RateLimitRegistry:
 
     @property
     def config_key(self) -> str:
+        return f'{RQ_KEY_PREFIX}:rl-config:{self.key}'
+
+    @property
+    def legacy_config_key(self) -> str:
         return f'{RQ_KEY_PREFIX}:rl:{self.key}'
 
     @property
@@ -335,7 +344,7 @@ class RateLimitRegistry:
 
         # Atomically remove registry if empty
         self._cleanup_script(
-            keys=[self.allowed_key, self.rate_limited_key, self.config_key, self.rl_keys_key],
+            keys=[self.allowed_key, self.rate_limited_key, self.config_key, self.rl_keys_key, self.legacy_config_key],
             args=[self.key],
         )
 

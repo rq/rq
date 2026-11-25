@@ -395,12 +395,26 @@ class TestRateLimitRegistry(RQTestCase):
         """cleanup() deletes the registry when allowed holds only stale ids and
         rate_limited is empty."""
         self.connection.zadd(self.rate_limit_registry.allowed_key, {'gone1': 1, 'gone2': 2})
+        self.connection.hset(self.rate_limit_registry.legacy_config_key, 'concurrency', 2)
 
         self.rate_limit_registry.cleanup()
 
         self.assertEqual(RateLimitRegistry.all(self.connection), [])
         self.assertFalse(self.connection.sismember(RateLimitRegistry.rl_keys_key, 'test'))
         self.assertFalse(self.connection.exists(self.rate_limit_registry.config_key))
+        self.assertFalse(self.connection.exists(self.rate_limit_registry.legacy_config_key))
+
+    def test_concurrency_reads_legacy_config(self):
+        registry = RateLimitRegistry(key='legacy', connection=self.connection)
+        self.connection.hset(registry.legacy_config_key, 'concurrency', 3)
+
+        self.assertEqual(registry.concurrency, 3)
+
+    def test_concurrency_ignores_legacy_key_with_wrong_type(self):
+        registry = RateLimitRegistry(key='test:allowed', connection=self.connection)
+        self.connection.zadd(registry.legacy_config_key, {'job': 1})
+
+        self.assertEqual(registry.concurrency, 0)
 
     def _add_to_rate_limited_for(self, registry, job_id, timestamp=None):
         """Helper to add a job to a given registry's rate_limited set."""
@@ -438,6 +452,22 @@ class TestRateLimitEnqueue(RQTestCase):
     def setUp(self):
         super().setUp()
         self.queue = Queue('default', connection=self.connection)
+
+    def test_rate_limit_keys_with_reserved_suffixes_do_not_collide(self):
+        for first_key, second_key in (
+            ('reports', 'reports:allowed'),
+            ('events:rate_limited', 'events'),
+        ):
+            first = self.queue.enqueue(say_hello, rate_limit=RateLimit(key=first_key, concurrency=1))
+            second = self.queue.enqueue(say_hello, rate_limit=RateLimit(key=second_key, concurrency=1))
+
+            first_registry = RateLimitRegistry(key=first_key, connection=self.connection)
+            second_registry = RateLimitRegistry(key=second_key, connection=self.connection)
+            self.assertEqual(first.get_status(), JobStatus.QUEUED)
+            self.assertEqual(second.get_status(), JobStatus.QUEUED)
+            self.assertNotEqual(first_registry.config_key, second_registry.allowed_key)
+            self.assertEqual(first_registry.get_allowed_job_ids(), [first.id])
+            self.assertEqual(second_registry.get_allowed_job_ids(), [second.id])
 
     def test_rate_limit_rejected_on_sync_queue(self):
         """RateLimit is not supported on synchronous (is_async=False) queues."""
