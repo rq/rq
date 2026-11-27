@@ -356,9 +356,10 @@ def burst_two_workers(queue, connection: Redis, timeout=2, start_timeout=10, pau
     Return after both workers have finished handling jobs, up to a fixed timeout
     on the worker that runs in another process.
     """
+    # Read the queue before any worker starts, so the first job is the one at its head.
+    jobs = queue.jobs
     w1 = start_worker_process(queue.name, worker_name='w1', burst=True, connection=connection)
     w2 = Worker(queue, name='w2', connection=connection)
-    jobs = queue.jobs
     if jobs:
         first_job = jobs[0]
         deadline = time.monotonic() + start_timeout
