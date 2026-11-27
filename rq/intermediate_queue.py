@@ -100,11 +100,11 @@ class IntermediateQueue:
             job_id (str): The job ID
             pipeline (Optional[Pipeline], optional): The Redis Pipeline. Defaults to None.
         """
-        connection = pipeline if pipeline is not None else self.connection.pipeline()
-        connection.lrem(self.key, 1, job_id)
-        connection.delete(self.get_first_seen_key(job_id))
+        pipe = pipeline if pipeline is not None else self.connection.pipeline()
+        pipe.lrem(self.key, 1, job_id)
+        pipe.delete(self.get_first_seen_key(job_id))
         if pipeline is None:
-            connection.execute()
+            pipe.execute()
 
     def cleanup(self, worker: BaseWorker, queue: Queue) -> None:
         job_ids = self.get_job_ids()
