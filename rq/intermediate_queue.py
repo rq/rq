@@ -8,6 +8,8 @@ from redis import Redis
 from rq.utils import now
 
 if TYPE_CHECKING:
+    from redis.client import Pipeline
+
     from .queue import Queue
     from .worker import BaseWorker
 
@@ -88,13 +90,21 @@ class IntermediateQueue:
         """
         return [job_id.decode() for job_id in self.connection.lrange(self.key, 0, -1)]
 
-    def remove(self, job_id: str) -> None:
-        """Removes a job from the intermediate queue.
+    def remove(self, job_id: str, pipeline: Pipeline | None = None) -> None:
+        """Removes a job from the intermediate queue, along with the timestamp of when it was first seen there.
+
+        The timestamp has to go too: otherwise, when the same job ID enters the intermediate queue again
+        (a retried job, or a new job with the same ID), `cleanup()` would consider it stuck right away.
 
         Args:
             job_id (str): The job ID
+            pipeline (Pipeline|None): The Redis Pipeline. Defaults to None.
         """
-        self.connection.lrem(self.key, 1, job_id)
+        connection = pipeline if pipeline is not None else self.connection.pipeline()
+        connection.lrem(self.key, 1, job_id)
+        connection.delete(self.get_first_seen_key(job_id))
+        if pipeline is None:
+            connection.execute()
 
     def cleanup(self, worker: BaseWorker, queue: Queue) -> None:
         job_ids = self.get_job_ids()
