@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 import pytest
 
-from rq import Queue, Worker
+from rq import Queue, Retry, Worker
 from rq.intermediate_queue import IntermediateQueue
 from rq.job import JobStatus
 from rq.maintenance import clean_intermediate_queue
@@ -86,6 +86,73 @@ class TestIntermediateQueue(RQTestCase):
         # After job_1.id is removed, only job_2.id is in the intermediate queue
         intermediate_queue.remove(job_1.id)
         self.assertEqual(intermediate_queue.get_job_ids(), [job_2.id])
+
+    def test_remove_deletes_first_seen(self):
+        """Removing a job from the intermediate queue also deletes its first seen timestamp."""
+        intermediate_queue = self.intermediate_queue
+        job_1 = self.queue.enqueue(say_hello)
+        job_2 = self.queue.enqueue(say_hello)
+        Queue.dequeue_any([self.queue], timeout=None, connection=self.connection)
+        Queue.dequeue_any([self.queue], timeout=None, connection=self.connection)
+        intermediate_queue.set_first_seen(job_1.id)
+        intermediate_queue.set_first_seen(job_2.id)
+
+        intermediate_queue.remove(job_1.id)
+        self.assertIsNone(intermediate_queue.get_first_seen(job_1.id))
+
+        # Within a pipeline, nothing changes until it's executed
+        with self.connection.pipeline() as pipeline:
+            intermediate_queue.remove(job_2.id, pipeline=pipeline)
+            self.assertIsNotNone(intermediate_queue.get_first_seen(job_2.id))
+            pipeline.execute()
+        self.assertIsNone(intermediate_queue.get_first_seen(job_2.id))
+        self.assertEqual(intermediate_queue.get_job_ids(), [])
+
+    def test_cleanup_does_not_retry_a_requeued_job_again(self):
+        """A stuck job that was requeued and dequeued again is not considered stuck before it starts."""
+        intermediate_queue = self.intermediate_queue
+        worker = Worker(self.queue, connection=self.connection)
+        job = self.queue.enqueue(say_hello, retry=Retry(max=3))
+        Queue.dequeue_any([self.queue], timeout=None, connection=self.connection)
+        two_minutes_ago = datetime.now(tz=timezone.utc) - timedelta(minutes=2)
+        self.connection.set(intermediate_queue.get_first_seen_key(job.id), two_minutes_ago.timestamp())
+
+        # The stuck job is retried
+        intermediate_queue.cleanup(worker, self.queue)
+        job.refresh()
+        self.assertEqual(job.retries_left, 2)
+        self.assertEqual(self.queue.get_job_ids(), [job.id])
+
+        # Another worker dequeues it, and a cleanup runs before that worker starts it
+        Queue.dequeue_any([self.queue], timeout=None, connection=self.connection)
+        intermediate_queue.cleanup(worker, self.queue)
+
+        job.refresh()
+        self.assertEqual(job.retries_left, 2)
+        self.assertEqual(self.queue.get_job_ids(), [])
+        self.assertEqual(intermediate_queue.get_job_ids(), [job.id])
+
+    def test_cleanup_does_not_fail_a_new_job_with_a_reused_id(self):
+        """A job whose ID was seen in the intermediate queue during an earlier run is not considered stuck."""
+        intermediate_queue = self.intermediate_queue
+        worker = Worker(self.queue, connection=self.connection)
+
+        # The earlier run sat in the intermediate queue during a cleanup two minutes ago, then ran
+        job = self.queue.enqueue(say_hello, job_id='reused-id')
+        Queue.dequeue_any([self.queue], timeout=None, connection=self.connection)
+        two_minutes_ago = datetime.now(tz=timezone.utc) - timedelta(minutes=2)
+        self.connection.set(intermediate_queue.get_first_seen_key(job.id), two_minutes_ago.timestamp())
+        worker.perform_job(job, self.queue, worker.prepare_execution(job))
+        self.assertEqual(job.get_status(), JobStatus.FINISHED)
+        self.assertIsNone(intermediate_queue.get_first_seen(job.id))
+
+        # The next run is dequeued, and a cleanup runs before a worker starts it
+        job = self.queue.enqueue(say_hello, job_id='reused-id')
+        Queue.dequeue_any([self.queue], timeout=None, connection=self.connection)
+        intermediate_queue.cleanup(worker, self.queue)
+
+        self.assertEqual(job.get_status(), JobStatus.QUEUED)
+        self.assertEqual(intermediate_queue.get_job_ids(), [job.id])
 
     def test_cleanup_intermediate_queue_in_maintenance(self):
         """Ensure jobs stuck in the intermediate queue are cleaned up."""

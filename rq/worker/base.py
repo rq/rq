@@ -1397,7 +1397,7 @@ class BaseWorker:
                 from ..queue import Queue
 
                 queue = Queue(job.origin, connection=self.connection)
-                pipeline.lrem(queue.intermediate_queue_key, 1, job.id)
+                queue.intermediate_queue.remove(job.id, pipeline=pipeline)
             pipeline.execute()
             self.log.debug('Worker %s: job preparation finished.', self.name)
 
