@@ -98,7 +98,7 @@ class IntermediateQueue:
 
         Args:
             job_id (str): The job ID
-            pipeline (Pipeline|None): The Redis Pipeline. Defaults to None.
+            pipeline (Optional[Pipeline], optional): The Redis Pipeline. Defaults to None.
         """
         connection = pipeline if pipeline is not None else self.connection.pipeline()
         connection.lrem(self.key, 1, job_id)
