@@ -135,6 +135,19 @@ class TestRegistry(RQTestCase):
         self.assertIsNone(self.connection.zscore(self.registry.key, job.id))
         self.assertFalse(self.connection.exists(job.key))
 
+    def test_remove_job_id_with_pipeline_and_delete_job(self):
+        """registry.remove() deletes the job when given a job id and a pipeline."""
+        queue = Queue(connection=self.connection)
+        job = queue.enqueue(say_hello)
+        self.registry.add(job, -1)
+
+        with self.connection.pipeline() as pipeline:
+            self.registry.remove(job.id, pipeline=pipeline, delete_job=True)
+            pipeline.execute()
+
+        self.assertIsNone(self.connection.zscore(self.registry.key, job.id))
+        self.assertFalse(self.connection.exists(job.key))
+
     def test_add_and_remove_with_serializer(self):
         """Adding and removing job from BaseRegistry (with serializer)."""
         # delete_job = True also works with job.id and custom serializer
