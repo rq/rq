@@ -108,10 +108,13 @@ class Dependency:
                 Defaults to False.
         """
         dependent_jobs = ensure_job_list(jobs)
-        if not all(isinstance(job, Job) or isinstance(job, str) for job in dependent_jobs if job):
-            raise ValueError('jobs: must contain objects of type Job and/or strings representing Job ids')
-        elif len(dependent_jobs) < 1:
+        if not dependent_jobs:
             raise ValueError('jobs: cannot be empty.')
+        for job in dependent_jobs:
+            if not isinstance(job, (Job, str)):
+                raise ValueError(
+                    f'jobs: must contain objects of type Job and/or strings representing Job ids, not {type(job)}'
+                )
 
         self.dependencies = dependent_jobs
         self.allow_failure = allow_failure
