@@ -184,6 +184,16 @@ class TestGroup(RQTestCase):
         assert 'group1' in [group.name for group in all_groups]
         assert 'group2' not in [group.name for group in all_groups]
 
+    def test_all_uses_serializer(self):
+        """Groups returned by Group.all() read their jobs with the given serializer."""
+        queue = Queue(connection=self.connection, serializer=JSONSerializer)
+        group = Group.create(connection=self.connection, serializer=JSONSerializer)
+        jobs = group.enqueue_many(queue, [Queue.prepare_data(say_hello, args=('Mo',))])
+
+        all_groups = Group.all(self.connection, serializer=JSONSerializer)
+        self.assertEqual(len(all_groups), 1)
+        self.assertEqual([job.id for job in all_groups[0].get_jobs()], [jobs[0].id])
+
     def test_all_deletes_missing_groups(self):
         q = Queue(connection=self.connection)
         group = Group.create(connection=self.connection)
