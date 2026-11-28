@@ -1,9 +1,12 @@
+import pickle
 import time
+import unittest
 from unittest.mock import patch
 
 from rq import Queue, SimpleWorker
 from rq.registry import FailedJobRegistry, FinishedJobRegistry
 from rq.timeouts import (
+    JobTimeoutException,
     TimerDeathPenalty,
     UnixSignalDeathPenalty,
     get_default_death_penalty_class,
@@ -68,3 +71,34 @@ class TestTimeouts(RQTestCase):
         delattr(mock_signal, 'SIGALRM')
         self.assertFalse(hasattr(mock_signal, 'SIGALRM'))
         self.assertEqual(get_default_death_penalty_class(), TimerDeathPenalty)
+
+
+class TestTimerDeathPenaltyIsolatesException(unittest.TestCase):
+    def test_timer_death_penalty_leaves_exception_class_unchanged(self):
+        TimerDeathPenalty(2)
+        self.assertEqual(str(JobTimeoutException('custom message')), 'custom message')
+
+        with self.assertRaises(JobTimeoutException) as context:
+            with TimerDeathPenalty(1):
+                thread_friendly_sleep_func(3)
+
+        self.assertIs(type(context.exception), JobTimeoutException)
+        self.assertEqual(
+            str(context.exception),
+            'Task exceeded maximum timeout value (1 seconds)',
+        )
+        unpickled = pickle.loads(pickle.dumps(context.exception))
+        self.assertEqual(
+            str(unpickled),
+            'Task exceeded maximum timeout value (1 seconds)',
+        )
+
+        with self.assertRaises(JobTimeoutException) as context:
+            with TimerDeathPenalty(30):
+                with TimerDeathPenalty(1):
+                    thread_friendly_sleep_func(3)
+
+        self.assertEqual(
+            str(context.exception),
+            'Task exceeded maximum timeout value (1 seconds)',
+        )

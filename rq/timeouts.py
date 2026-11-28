@@ -83,12 +83,13 @@ class TimerDeathPenalty(BaseDeathPenalty):
         self._target_thread_id = threading.current_thread().ident
         self._timer = None
 
-        # Monkey-patch exception with the message ahead of time
-        # since PyThreadState_SetAsyncExc can only take a class
-        def init_with_message(self, *args, **kwargs):  # noqa
-            super(exception, self).__init__(f'Task exceeded maximum timeout value ({timeout} seconds)')
-
-        self._exception.__init__ = init_with_message
+    def __exit__(self, type, value, traceback):
+        suppress = super().__exit__(type, value, traceback)
+        # PyThreadState_SetAsyncExc can only inject a class, so the raised
+        # instance has no message until the with-block exits.
+        if isinstance(value, self._exception) and not value.args:
+            value.args = (f'Task exceeded maximum timeout value ({self._timeout} seconds)',)
+        return suppress
 
     def new_timer(self):
         """Returns a new timer since timers can only be used once."""
