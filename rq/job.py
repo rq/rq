@@ -15,7 +15,7 @@ from uuid import uuid4
 
 from redis import WatchError
 
-from .defaults import CALLBACK_TIMEOUT, RQ_KEY_PREFIX, UNSERIALIZABLE_RETURN_VALUE_PAYLOAD
+from .defaults import CALLBACK_TIMEOUT, DEFAULT_FAILURE_TTL, RQ_KEY_PREFIX, UNSERIALIZABLE_RETURN_VALUE_PAYLOAD
 from .types import FailureCallbackType, SuccessCallbackType
 
 if TYPE_CHECKING:
@@ -1570,6 +1570,15 @@ class Job:
         """
         return default_ttl if self.result_ttl is None else self.result_ttl
 
+    def get_failure_ttl(self) -> int:
+        """Returns ttl for a job that determines how long a failed job, its
+        entry in the failed job registry and its failure results are kept.
+
+        Returns:
+            ttl (int): The failure_ttl of the job, or DEFAULT_FAILURE_TTL if it isn't set
+        """
+        return DEFAULT_FAILURE_TTL if self.failure_ttl is None else self.failure_ttl
+
     # Representation
     def get_call_string(self) -> str | None:  # noqa
         """Returns a string representation of the call, formatted as a regular
@@ -1686,7 +1695,7 @@ class Job:
         failed_job_registry = self.failed_job_registry
         failed_job_registry.add(
             self,
-            ttl=self.failure_ttl,
+            ttl=self.get_failure_ttl(),
             exc_string=exc_string,
             pipeline=pipeline,
         )
@@ -1694,7 +1703,7 @@ class Job:
 
         Result.create_failure(
             self,
-            self.failure_ttl,
+            self.get_failure_ttl(),
             exc_string=exc_string,
             worker_name=worker_name,
             pipeline=pipeline,
@@ -1731,7 +1740,7 @@ class Job:
 
         Result.create_retried(
             self,
-            self.failure_ttl,
+            self.get_failure_ttl(),
             return_value=retry,
             worker_name=worker_name,
             pipeline=pipeline,
