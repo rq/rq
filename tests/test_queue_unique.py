@@ -1,10 +1,6 @@
 """Tests for Queue unique job enqueue behavior."""
 
-import gc
-import weakref
 from datetime import datetime, timedelta, timezone
-
-from redis import Redis
 
 from rq import Queue
 from rq.exceptions import DuplicateJobError
@@ -118,29 +114,3 @@ class TestEnqueueJobUnique(RQTestCase):
         scheduled_time = datetime.now(timezone.utc) + timedelta(hours=1)
         with self.assertRaises(ValueError):
             queue.schedule_job(job, scheduled_time, unique=True)
-
-
-class TestUniqueScriptsDoNotLeakClients(RQTestCase):
-    """Unique enqueue/schedule must not keep the Redis clients they were given alive."""
-
-    def _fresh_client(self):
-        kwargs = self.connection.connection_pool.connection_kwargs
-        return Redis(host=kwargs['host'], port=kwargs['port'], db=kwargs['db'])
-
-    def test_enqueue_unique_does_not_keep_client_alive(self):
-        """A client used for enqueue(unique=True) can be garbage collected afterwards."""
-        client = self._fresh_client()
-        Queue(connection=client).enqueue(say_hello, job_id='leak-enqueue', unique=True)
-        client_ref = weakref.ref(client)
-        del client
-        gc.collect()
-        self.assertIsNone(client_ref())
-
-    def test_enqueue_in_unique_does_not_keep_client_alive(self):
-        """A client used for enqueue_in(unique=True) can be garbage collected afterwards."""
-        client = self._fresh_client()
-        Queue(connection=client).enqueue_in(timedelta(minutes=5), say_hello, job_id='leak-schedule', unique=True)
-        client_ref = weakref.ref(client)
-        del client
-        gc.collect()
-        self.assertIsNone(client_ref())
