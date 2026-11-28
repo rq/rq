@@ -19,7 +19,7 @@ from rq import Queue, get_current_job
 from rq.command import send_kill_horse_command, send_shutdown_command
 from rq.connections import get_connection_kwargs
 from rq.defaults import DEFAULT_JOB_MONITORING_INTERVAL
-from rq.job import Job
+from rq.job import Job, JobStatus
 from rq.suspension import resume
 from rq.timeouts import UnixSignalDeathPenalty
 from rq.worker import HerokuWorker, SpawnWorker, Worker
@@ -347,23 +347,28 @@ def start_worker_process(
     return p
 
 
-def burst_two_workers(queue, connection: Redis, timeout=2, tries=5, pause=0.1):
+def burst_two_workers(queue, connection: Redis, timeout=2, start_timeout=10, pause=0.1):
     """
     Get two workers working simultaneously in burst mode, on a given queue.
+    The second worker only starts once the first one has taken the first job,
+    so tests can tell which worker takes which job. Raises TimeoutError if the
+    first worker doesn't take it within `start_timeout` seconds.
     Return after both workers have finished handling jobs, up to a fixed timeout
     on the worker that runs in another process.
     """
+    # Read the queue before any worker starts, so the first job is the one at its head.
+    jobs = queue.jobs
     w1 = start_worker_process(queue.name, worker_name='w1', burst=True, connection=connection)
     w2 = Worker(queue, name='w2', connection=connection)
-    jobs = queue.jobs
     if jobs:
         first_job = jobs[0]
-        # Give the first worker process time to get started on the first job.
-        # This is helpful in tests where we want to control which worker takes which job.
-        n = 0
-        while n < tries and not first_job.is_started:
+        deadline = time.monotonic() + start_timeout
+        while first_job.get_status() == JobStatus.QUEUED:
+            if time.monotonic() > deadline:
+                w1.terminate()
+                w1.join()
+                raise TimeoutError(f'Worker w1 did not start job {first_job.id} within {start_timeout} seconds')
             time.sleep(pause)
-            n += 1
     # Now can start the second worker.
     w2.work(burst=True)
     w1.join(timeout)
