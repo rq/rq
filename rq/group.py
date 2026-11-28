@@ -82,13 +82,13 @@ class Group:
         return group
 
     @classmethod
-    def all(cls, connection: Redis) -> list[Group]:
+    def all(cls, connection: Redis, serializer=None) -> list[Group]:
         "Returns an iterable of all Groups."
         group_keys = [as_text(key) for key in connection.smembers(cls.REDIS_GROUP_KEY)]
         groups = []
         for key in group_keys:
             try:
-                groups.append(cls.fetch(key, connection=connection))
+                groups.append(cls.fetch(key, connection=connection, serializer=serializer))
             except NoSuchGroupError:
                 connection.srem(cls.REDIS_GROUP_KEY, key)
         return groups
