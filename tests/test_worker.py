@@ -29,6 +29,7 @@ from rq.suspension import resume, suspend
 from rq.utils import as_text, now
 from rq.version import VERSION
 from rq.worker import HerokuWorker, RandomWorker, RoundRobinWorker, WorkerStatus
+from rq.worker_registration import clean_worker_registry
 from tests import RQTestCase, find_empty_redis_database, min_redis_version, slow
 from tests.fixtures import (
     CustomJob,
@@ -472,6 +473,42 @@ class TestWorker(RQTestCase):
             worker.maintain_heartbeats(job, execution)
 
         self.assertGreater(self.connection.ttl(worker.key), 0)
+
+    def test_heartbeat_registers_worker_again_after_expiry(self):
+        """worker.heartbeat() restores the worker hash and registries after the worker key expired"""
+        queue = Queue(connection=self.connection)
+        worker = Worker([queue], connection=self.connection)
+        worker.register_birth()
+        worker.set_state(WorkerStatus.IDLE)
+
+        # Simulate the worker key expiring and the registries being cleaned,
+        # e.g. after the host slept longer than the worker TTL
+        self.connection.delete(worker.key)
+        clean_worker_registry(queue)
+
+        worker.heartbeat()
+
+        self.assertEqual(Worker.all(queue=queue), [worker])
+        fetched_worker = Worker.find_by_key(worker.key, connection=self.connection)
+        self.assertEqual(fetched_worker.queue_names(), [queue.name])
+        self.assertEqual(fetched_worker.get_state(), WorkerStatus.IDLE)
+
+    def test_maintain_heartbeats_registers_worker_again_after_expiry(self):
+        """worker.maintain_heartbeats() adds a worker whose key expired back to the registries"""
+        queue = Queue(connection=self.connection)
+        worker = Worker([queue], connection=self.connection)
+        worker.register_birth()
+        job = queue.enqueue(say_hello)
+        execution = worker.prepare_execution(job)
+        worker.prepare_job_execution(job)
+        self.connection.delete(worker.key)
+        clean_worker_registry(queue)
+
+        worker.maintain_heartbeats(job, execution)
+
+        self.assertEqual(Worker.all(queue=queue), [worker])
+        fetched_worker = Worker.find_by_key(worker.key, connection=self.connection)
+        self.assertEqual(fetched_worker.get_state(), WorkerStatus.BUSY)
 
     def test_maintain_heartbeats_working_time_from_started_at(self):
         """maintain_heartbeats() measures working time from job.started_at, not execution.created_at"""
